@@ -35,6 +35,33 @@ const mapCtx = mapCanvas.getContext("2d", {'willReadFrequently': true});
 if (mapCtx === null) throw new Error("2D rendering context not supported.");
 mapCtx.imageSmoothingEnabled = false;
 
+const splobeImage = new Image(12, 16);
+splobeImage.src = 'assets/splobe.png';
+const crosshairImage = new Image(8, 8);
+crosshairImage.src = 'assets/crosshair.png';
+const starSheet = new Image(15, 9);
+starSheet.src = 'assets/starsheet.png';
+const particleSheet = new Image(10, 2);
+particleSheet.src = 'assets/particlesheet.png';
+const missileSheet = new Image(8, 8);
+missileSheet.src = 'assets/missile.png';
+
+const earthImage = new Image(128, 128);
+earthImage.src = 'assets/earth.png';
+mapCtx.drawImage(earthImage, 0, 0, 128, 128);
+var earthImageData = mapCtx.getImageData(0, 0, 128, 128);
+mapCtx.clearRect(0, 0, 128, 128);
+const moonImage = new Image(128, 128);
+moonImage.src = 'assets/moon.png';
+mapCtx.drawImage(moonImage, 0, 0, 128, 128);
+var moonImageData = mapCtx.getImageData(0, 0, 128, 128);
+mapCtx.clearRect(0, 0, 128, 128);
+const sunImage = new Image(128, 128);
+sunImage.src = 'assets/sun.png';
+mapCtx.drawImage(sunImage, 0, 0, 128, 128);
+var sunImageData = mapCtx.getImageData(0, 0, 128, 128);
+mapCtx.clearRect(0, 0, 128, 128);
+
 class Vector2 {
     x: number;
     y: number;
@@ -80,7 +107,7 @@ class Vector2 {
     angleTo(that: Vector2): number {
         let angle = Math.atan2((that.y-this.y), (that.x-this.x));
         angle += Math.PI/2;
-        angle %= 2*Math.PI;
+        angle = mod(angle, 2*Math.PI);
         return angle;
     }
 
@@ -429,7 +456,7 @@ class Renderer {
     particles: Particle[];
     backgroundRegion: Rectangle;
 
-    static project(x: number, y: number, pixelRadius: number, perspective: number): [number, number, number, number, number, number] {
+    static mercatorProject(x: number, y: number, pixelRadius: number, perspective: number): [number, number, number, number, number, number] {
         let lambda = ((2*Math.PI*x)/128) - Math.PI;
         let phi = 2*(Math.atan(Math.exp(Math.PI-((2*Math.PI*y)/128)))); 
         let X = 64*Math.sin(phi)*Math.cos(lambda);
@@ -454,7 +481,7 @@ class Renderer {
         this.missileSheet = missileSheet;
         this.crosshairImage = crosshairImage;
         this.projections = [];
-        for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) this.projections.push(Renderer.project(x, y, 0.5, 512));
+        for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) this.projections.push(Renderer.mercatorProject(x, y, 0.5, 512));
         this.projections.sort((proj1, proj2) => {return proj1[4] - proj2[4];});
         this.camera = camera;
         this.stars = [];
@@ -537,7 +564,7 @@ class Renderer {
 
     renderPlanets(planets: Planet[], player: Player): void {
         for (let i = 0; i < planets.length; i++) {
-            if (!(player.position.distanceTo(planets[i].position) > this.backgroundRegion.w && planets[i].getRectangle().inRectangle(this.camera.region))) {
+            if (player.position.distanceTo(planets[i].position) <= this.backgroundRegion.w || planets[i].getRectangle().inRectangle(this.camera.region)) {
                 for (let j = 0; j < this.projections.length; j++) {
                     if (this.projections[j][5] <= 64) {
                         let x = this.projections[j][0];
@@ -634,6 +661,18 @@ class Renderer {
         this.ctx.restore();
     }
 
+    renderUI(player: Player): void {
+        let healthRatio = Math.floor(player.health/player.maxHealth);
+        let fuelRatio = Math.floor(player.fuel/player.maxFuel);
+        this.ctx.fillStyle = "rgb(64, 64, 64)";
+        this.ctx.fillRect(12, this.ctx.canvas.height-36, 200, 24);
+        this.ctx.fillRect(12, this.ctx.canvas.height-68, 200, 24);
+        this.ctx.fillStyle = "rgb(255, 64, 64)";
+        this.ctx.fillRect(16, this.ctx.canvas.height-32, 192*healthRatio, 16);
+        this.ctx.fillStyle = "rgb(64, 64, 255)";
+        this.ctx.fillRect(16, this.ctx.canvas.height-64, 192*fuelRatio, 16);
+    }
+
     renderStats(player: Player): void {
         this.ctx.fillStyle = "rgb(127, 127, 255)";
         this.ctx.font = "12px serif";
@@ -654,6 +693,7 @@ class Renderer {
         this.renderParticles(timekeeper.now, timekeeper.dt, gameState.player);
         this.renderCrosshair(gameState.mouse);
         this.renderPlayer(gameState.player);
+        this.renderUI(gameState.player);
         this.renderStats(gameState.player);
     }
 }
@@ -671,33 +711,6 @@ function frame(timekeeper: Timekeeper, gameState: GameState, renderer: Renderer,
     const ctx = canvas.getContext("2d");
     if (ctx === null) throw new Error("2D rendering context not supported.");
     ctx.imageSmoothingEnabled = false;
-
-    const splobeImage = new Image(12, 16);
-    splobeImage.src = 'assets/splobe.png';
-    const crosshairImage = new Image(8, 8);
-    crosshairImage.src = 'assets/crosshair.png';
-    const starSheet = new Image(15, 9);
-    starSheet.src = 'assets/starsheet.png';
-    const particleSheet = new Image(10, 2);
-    particleSheet.src = 'assets/particlesheet.png';
-    const missileSheet = new Image(8, 8);
-    missileSheet.src = 'assets/missile.png';
-    
-    const earthImage = new Image(128, 128);
-    earthImage.src = 'assets/earth.png';
-    mapCtx.drawImage(earthImage, 0, 0, 128, 128);
-    var earthImageData = mapCtx.getImageData(0, 0, 128, 128);
-    mapCtx.clearRect(0, 0, 128, 128);
-    const moonImage = new Image(128, 128);
-    moonImage.src = 'assets/moon.png';
-    mapCtx.drawImage(moonImage, 0, 0, 128, 128);
-    var moonImageData = mapCtx.getImageData(0, 0, 128, 128);
-    mapCtx.clearRect(0, 0, 128, 128);
-    const sunImage = new Image(128, 128);
-    sunImage.src = 'assets/sun.png';
-    mapCtx.drawImage(sunImage, 0, 0, 128, 128);
-    var sunImageData = mapCtx.getImageData(0, 0, 128, 128);
-    mapCtx.clearRect(0, 0, 128, 128);
 
     var rect = canvas.getBoundingClientRect();
     var scaleX = canvas.width / rect.width;
