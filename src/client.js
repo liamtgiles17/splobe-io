@@ -449,39 +449,40 @@ class Renderer {
     }
     renderPlanets(planets, player) {
         for (let i = 0; i < planets.length; i++) {
-            // if (planets[i].getRectangle().inRectangle(this.camera.region) || planets[i].position.distanceTo(player.position) <= this.factor) {
-            for (let j = 0; j < this.projections.length; j++) {
-                if (this.projections[j][5] <= 64) {
-                    let x = this.projections[j][0];
-                    let y = this.projections[j][1];
-                    let xProjected = Math.floor(this.projections[j][2]);
-                    let yProjected = Math.floor(this.projections[j][3]);
-                    let scaleProjected = Math.ceil(this.projections[j][4]);
-                    xProjected -= scaleProjected;
-                    yProjected -= scaleProjected;
-                    let velComp = Math.floor(x + planets[i].spinOffset);
-                    let r = planets[i].imageData[(4 * (y * this.offscreenCanvas.width + velComp)) + 0];
-                    let g = planets[i].imageData[(4 * (y * this.offscreenCanvas.width + velComp)) + 1];
-                    let b = planets[i].imageData[(4 * (y * this.offscreenCanvas.width + velComp)) + 2];
-                    let a = planets[i].imageData[(4 * (y * this.offscreenCanvas.width + velComp)) + 3];
-                    for (let k = 0; k < scaleProjected * 2; k++) {
-                        for (let l = 0; l < scaleProjected * 2; l++) {
-                            if (0 <= yProjected + k && yProjected + k < 128 && 0 <= xProjected + l && xProjected + l < 128) {
-                                this.buffer.data[(4 * (((yProjected + k) * 128) + xProjected + l)) + 0] = r;
-                                this.buffer.data[(4 * (((yProjected + k) * 128) + xProjected + l)) + 1] = g;
-                                this.buffer.data[(4 * (((yProjected + k) * 128) + xProjected + l)) + 2] = b;
-                                this.buffer.data[(4 * (((yProjected + k) * 128) + xProjected + l)) + 3] = a;
+            const planet = planets[i];
+            if (planet.getRectangle().inRectangle(this.camera.region) || planet.position.distanceTo(player.position) <= this.factor) {
+                for (let j = 0; j < this.projections.length; j++) {
+                    if (this.projections[j][5] <= 64) {
+                        let x = this.projections[j][0];
+                        let y = this.projections[j][1];
+                        let xProjected = Math.floor(this.projections[j][2]);
+                        let yProjected = Math.floor(this.projections[j][3]);
+                        let scaleProjected = Math.ceil(this.projections[j][4]);
+                        xProjected -= scaleProjected;
+                        yProjected -= scaleProjected;
+                        let velComp = Math.floor(x + planet.spinOffset);
+                        let r = planet.imageData[(4 * (y * this.offscreenCanvas.width + velComp)) + 0];
+                        let g = planet.imageData[(4 * (y * this.offscreenCanvas.width + velComp)) + 1];
+                        let b = planet.imageData[(4 * (y * this.offscreenCanvas.width + velComp)) + 2];
+                        let a = planet.imageData[(4 * (y * this.offscreenCanvas.width + velComp)) + 3];
+                        for (let k = 0; k < scaleProjected * 2; k++) {
+                            for (let l = 0; l < scaleProjected * 2; l++) {
+                                if (0 <= yProjected + k && yProjected + k < 128 && 0 <= xProjected + l && xProjected + l < 128) {
+                                    this.buffer.data[(4 * (((yProjected + k) * 128) + xProjected + l)) + 0] = r;
+                                    this.buffer.data[(4 * (((yProjected + k) * 128) + xProjected + l)) + 1] = g;
+                                    this.buffer.data[(4 * (((yProjected + k) * 128) + xProjected + l)) + 2] = b;
+                                    this.buffer.data[(4 * (((yProjected + k) * 128) + xProjected + l)) + 3] = a;
+                                }
                             }
                         }
                     }
                 }
+                let pos = planets[i].position.addScalar(-planets[i].radius).addVector(this.camera.offset.scale(-1));
+                this.offscreenCtx.putImageData(this.buffer, 0, 0);
+                this.ctx.drawImage(this.offscreenCanvas, ...pos.toArray(), planets[i].radius * 2, planets[i].radius * 2);
+                this.offscreenCtx.clearRect(0, 0, 128, 128);
+                this.buffer.data.fill(0);
             }
-            let pos = planets[i].position.addScalar(-planets[i].radius).addVector(this.camera.offset.scale(-1));
-            this.offscreenCtx.putImageData(this.buffer, 0, 0);
-            this.ctx.drawImage(this.offscreenCanvas, ...pos.toArray(), planets[i].radius * 2, planets[i].radius * 2);
-            this.offscreenCtx.clearRect(0, 0, 128, 128);
-            this.buffer.data.fill(0);
-            // }
         }
     }
     renderMissiles(missiles) {
