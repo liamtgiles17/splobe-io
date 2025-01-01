@@ -153,7 +153,7 @@ class Player {
         this.maxVelocity = 12000;
         this.acceleration = 150;
         this.direction = direction;
-        this.angularVelocity = 4.5;
+        this.angularVelocity = 5;
         this.maxHealth = maxHealth;
         this.health = maxHealth;
         this.maxFuel = maxFuel;
@@ -197,13 +197,14 @@ class Player {
     }
 }
 class Missile {
-    constructor(position, velocity, direction, source) {
+    constructor(position, velocity, direction, t0, source) {
         this.position = position;
-        this.origin = new Vector2(...this.position.toArray());
         this.size = new Vector2(4, 8);
         this.velocity = velocity;
         this.direction = direction;
         this.damage = 30;
+        this.t0 = t0;
+        this.lifetime = 1000;
         this.source = source;
     }
 }
@@ -218,6 +219,10 @@ class Planet {
         this.spinVelocity = spinVelocity;
         this.spinRight = spinRight;
         this.orbiting = orbiting;
+        if (this.orbiting !== null)
+            this.orbitalDistance = this.position.distanceTo(this.orbiting.position);
+        else
+            this.orbitalDistance = null;
         this.orbitsClockwise = orbitsClockwise;
         if (orbiting === null)
             orbitsClockwise = null;
@@ -231,15 +236,13 @@ class Planet {
         else
             this.spinOffset += this.spinVelocity * dt;
         this.spinOffset = mod(this.spinOffset, 128);
-        if (this.orbiting !== null) {
-            let angle = this.position.angleTo(this.orbiting.position);
-            if (this.orbitsClockwise)
-                angle -= Math.PI / 2;
-            else
-                angle += Math.PI / 2;
-            angle = mod(angle, 2 * Math.PI);
-            this.position.x += this.velocity * dt * Math.sin(angle);
-            this.position.y -= this.velocity * dt * Math.cos(angle);
+        if (this.orbiting !== null && this.orbitalDistance !== null) {
+            if (this.position.distanceTo(this.orbiting.position) != this.orbitalDistance) {
+                let difference = this.position.distanceTo(this.orbiting.position) - this.orbitalDistance;
+                let angle = this.position.angleTo(this.orbiting.position);
+                this.position.x += difference * Math.sin(angle);
+                this.position.y -= difference * Math.cos(angle);
+            }
         }
     }
 }
@@ -309,7 +312,7 @@ class GameState {
         this.missiles = [];
         this.planets = planets;
     }
-    spawnMissiles(camera) {
+    spawnMissiles(now, camera) {
         if (this.mouse.down && this.player.canShoot && this.mouse.crosshairActive && this.player.missiles > 0) {
             let rotateX = this.player.size.x * Math.cos(this.player.direction) * 0.33;
             let rotateY = this.player.size.y * Math.sin(this.player.direction) * 0.33;
@@ -318,27 +321,50 @@ class GameState {
             if (this.player.velocity <= 500)
                 velocity = 500;
             let direction = this.player.position.addVector(camera.offset.scale(-1)).angleTo(this.mouse.position);
-            this.missiles.push(new Missile(position, velocity, direction, this.player));
+            this.missiles.push(new Missile(position, velocity, direction, now, this.player));
             this.player.missiles--;
             this.player.canShoot = false;
         }
     }
-    updateMissiles(dt, camera) {
-        this.spawnMissiles(camera);
+    updateMissiles(now, dt, camera) {
+        this.spawnMissiles(now, camera);
         for (let i = 0; i < this.missiles.length; i++) {
             this.missiles[i].position.x += this.missiles[i].velocity * dt * Math.sin(this.missiles[i].direction);
             this.missiles[i].position.y -= this.missiles[i].velocity * dt * Math.cos(this.missiles[i].direction);
-            if (this.missiles[i].position.distanceTo(this.missiles[i].origin) >= 8000) {
+            if (now - this.missiles[i].t0 >= this.missiles[i].lifetime) {
                 delete this.missiles[i];
             }
             this.missiles = this.missiles.filter(item => item !== undefined);
         }
     }
+    updatePlanets(dt) {
+        for (let i = 0; i < this.planets.length; i++) {
+            const planet = this.planets[i];
+            if (planet.orbiting !== null) {
+                let angle = planet.position.angleTo(planet.orbiting.position);
+                if (planet.orbitsClockwise)
+                    angle -= Math.PI / 2;
+                else
+                    angle += Math.PI / 2;
+                angle = mod(angle, 2 * Math.PI);
+                planet.position.x += planet.velocity * dt * Math.sin(angle);
+                planet.position.y -= planet.velocity * dt * Math.cos(angle);
+                for (let j = 0; j < this.planets.length; j++) {
+                    if (this.planets[j].orbiting == planet) {
+                        this.planets[j].position.x += planet.velocity * dt * Math.sin(angle);
+                        this.planets[j].position.y -= planet.velocity * dt * Math.cos(angle);
+                    }
+                }
+            }
+        }
+        console.log(`${this.planets[1].position.distanceTo(this.planets[0].position)}`);
+    }
     update(timekeeper, camera) {
         this.mouse.update();
         for (let i = 0; i < this.planets.length; i++)
             this.planets[i].update(timekeeper.dt);
-        this.updateMissiles(timekeeper.dt, camera);
+        this.updateMissiles(timekeeper.now, timekeeper.dt, camera);
+        this.updatePlanets(timekeeper.dt);
         this.player.update(this.mouse, timekeeper.dt);
     }
 }
@@ -646,9 +672,9 @@ function frame(timekeeper, gameState, renderer, timestamp) {
     let mouse = new Mouse(new Vector2(mouseX, mouseY), mouseDown, true, true);
     const timekeeper = new Timekeeper(60, 0, window.performance.now(), 0);
     const player = new Player(loadedStuff.splobeImage, new Vector2(0, 0), new Vector2(16, 16), 0, 0, 100, 100);
-    const sun = new Planet(loadedStuff.sunImage, loadedStuff.sunImageData, new Vector2(0, 1000), 200, 0, 32, true, null, null);
-    const earth = new Planet(loadedStuff.earthImage, loadedStuff.earthImageData, new Vector2(0, 0), 48, 0, 32, true, null, null);
-    const moon = new Planet(loadedStuff.moonImage, loadedStuff.moonImageData, new Vector2(300, 300), 24, 16, 16, true, earth, true);
+    const sun = new Planet(loadedStuff.sunImage, loadedStuff.sunImageData, new Vector2(0, 0), 200, 0, 32, true, null, null);
+    const earth = new Planet(loadedStuff.earthImage, loadedStuff.earthImageData, new Vector2(0, -1000), 48, 128, 32, true, sun, false);
+    const moon = new Planet(loadedStuff.moonImage, loadedStuff.moonImageData, new Vector2(300, -700), 24, 256, 16, true, earth, true);
     const planets = [sun, earth, moon];
     const gameState = new GameState(mouse, player, planets);
     const renderingFactor = canvas.width * 4;
