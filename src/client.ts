@@ -1,11 +1,20 @@
+function loadImage(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+    });
+}
+
 function mod(n: number, m: number): number {
     return ((n%m)+m)%m;
 }
 
-var mouseX = 0;
-var mouseY = 0;
-var mouseDown = false;
-var keys = {
+let mouseX = 0;
+let mouseY = 0;
+let mouseDown = false;
+let keys = {
     'w': false,
     'a': false,
     's': false,
@@ -29,38 +38,6 @@ window.addEventListener('keyup', (e: KeyboardEvent) => {
     if ((e.key === 'q' || e.key === 'Q') && keys['q']) keys['q'] = false;
     if ((e.key === 'e' || e.key === 'E') && keys['e']) keys['e'] = false;
 });
-
-const mapCanvas = new OffscreenCanvas(128, 128);
-const mapCtx = mapCanvas.getContext("2d", {'willReadFrequently': true});
-if (mapCtx === null) throw new Error("2D rendering context not supported.");
-mapCtx.imageSmoothingEnabled = false;
-
-const splobeImage = new Image(12, 16);
-splobeImage.src = 'assets/splobe.png';
-const crosshairImage = new Image(8, 8);
-crosshairImage.src = 'assets/crosshair.png';
-const starSheet = new Image(15, 9);
-starSheet.src = 'assets/starsheet.png';
-const particleSheet = new Image(10, 2);
-particleSheet.src = 'assets/particlesheet.png';
-const missileSheet = new Image(8, 8);
-missileSheet.src = 'assets/missile.png';
-
-const earthImage = new Image(128, 128);
-earthImage.src = 'assets/earth.png';
-mapCtx.drawImage(earthImage, 0, 0, 128, 128);
-var earthImageData = mapCtx.getImageData(0, 0, 128, 128);
-mapCtx.clearRect(0, 0, 128, 128);
-const moonImage = new Image(128, 128);
-moonImage.src = 'assets/moon.png';
-mapCtx.drawImage(moonImage, 0, 0, 128, 128);
-var moonImageData = mapCtx.getImageData(0, 0, 128, 128);
-mapCtx.clearRect(0, 0, 128, 128);
-const sunImage = new Image(128, 128);
-sunImage.src = 'assets/sun.png';
-mapCtx.drawImage(sunImage, 0, 0, 128, 128);
-var sunImageData = mapCtx.getImageData(0, 0, 128, 128);
-mapCtx.clearRect(0, 0, 128, 128);
 
 class Vector2 {
     x: number;
@@ -270,9 +247,9 @@ class Planet {
     spinVelocity: number;
     spinRight: boolean;
     orbiting: Planet | null;
-    clockwise: boolean | null;
+    orbitsClockwise: boolean | null;
 
-    constructor(image: HTMLImageElement, imageData: Uint8ClampedArray, position: Vector2, radius: number, velocity: number, spinVelocity: number, spinRight: boolean, orbiting: Planet | null, clockwise: boolean | null) {
+    constructor(image: HTMLImageElement, imageData: Uint8ClampedArray, position: Vector2, radius: number, velocity: number, spinVelocity: number, spinRight: boolean, orbiting: Planet | null, orbitsClockwise: boolean | null) {
         this.image = image;
         this.imageData = imageData;
         this.position = position;
@@ -282,8 +259,8 @@ class Planet {
         this.spinVelocity = spinVelocity;
         this.spinRight = spinRight;
         this.orbiting = orbiting;
-        this.clockwise = clockwise;
-        if (orbiting === null) clockwise = null;
+        this.orbitsClockwise = orbitsClockwise;
+        if (orbiting === null) orbitsClockwise = null;
     }
 
     getRectangle(): Rectangle {
@@ -297,7 +274,7 @@ class Planet {
 
         if (this.orbiting !== null) {
             let angle = this.position.angleTo(this.orbiting.position);
-            if (this.clockwise) angle -= Math.PI/2;
+            if (this.orbitsClockwise) angle -= Math.PI/2;
             else angle += Math.PI/2;
             angle = mod(angle, 2*Math.PI);
             this.position.x += this.velocity * dt * Math.sin(angle);
@@ -443,7 +420,7 @@ class GameState {
 class Renderer {
     offscreenCanvas: OffscreenCanvas;
     ctx: CanvasRenderingContext2D;
-    offscreenCtx: OffscreenCanvasRenderingContext2D | null;
+    offscreenCtx: OffscreenCanvasRenderingContext2D;
     buffer: ImageData;
     factor: number;
     starSheet: HTMLImageElement;
@@ -468,12 +445,10 @@ class Renderer {
         return [x, y, xProjected, yProjected, scaleProjected, Z];
     }
 
-    constructor(ctx: CanvasRenderingContext2D, factor: number, starSheet: HTMLImageElement, particleSheet: HTMLImageElement, missileSheet: HTMLImageElement, crosshairImage: HTMLImageElement, camera: Camera, backgroundRegion: Rectangle) {
-        this.offscreenCanvas = new OffscreenCanvas(128, 128);
+    constructor(offscreenCanvas: OffscreenCanvas, offscreenCtx: OffscreenCanvasRenderingContext2D, ctx: CanvasRenderingContext2D, factor: number, starSheet: HTMLImageElement, particleSheet: HTMLImageElement, missileSheet: HTMLImageElement, crosshairImage: HTMLImageElement, camera: Camera, backgroundRegion: Rectangle) {
+        this.offscreenCanvas = offscreenCanvas;
+        this.offscreenCtx = offscreenCtx;
         this.ctx = ctx;
-        this.offscreenCtx = this.offscreenCanvas.getContext("2d");
-        if (this.offscreenCtx === null) throw new Error("2D rendering context not supported.");
-        this.offscreenCtx.imageSmoothingEnabled = false;
         this.buffer = new ImageData(128, 128);
         this.factor = factor;
         this.starSheet = starSheet;
@@ -481,7 +456,11 @@ class Renderer {
         this.missileSheet = missileSheet;
         this.crosshairImage = crosshairImage;
         this.projections = [];
-        for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) this.projections.push(Renderer.mercatorProject(x, y, 0.5, 512));
+        for (let y = 0; y < 128; y++) {
+            for (let x = 0; x < 128; x++) {
+                this.projections.push(Renderer.mercatorProject(x, y, 0.5, 512));
+            }
+        }
         this.projections.sort((proj1, proj2) => {return proj1[4] - proj2[4];});
         this.camera = camera;
         this.stars = [];
@@ -492,7 +471,7 @@ class Renderer {
     spawnStars(region: Rectangle, player: Player) {
         for (let i = 0; i < region.w; i+=3) {
             for (let j = 0; j < region.h; j+=3) {
-                if (Math.random() > 0.9997) {
+                if (Math.random() > 0.9996) {
                     let pos = new Vector2(i+region.x, j+region.y);
                     let c = !pos.inRectangle(this.camera.region);
                     if (player.position.inRectangle(this.camera.region)) c = true;
@@ -564,7 +543,7 @@ class Renderer {
 
     renderPlanets(planets: Planet[], player: Player): void {
         for (let i = 0; i < planets.length; i++) {
-            if (player.position.distanceTo(planets[i].position) <= this.backgroundRegion.w || planets[i].getRectangle().inRectangle(this.camera.region)) {
+            // if (planets[i].getRectangle().inRectangle(this.camera.region) || planets[i].position.distanceTo(player.position) <= this.factor) {
                 for (let j = 0; j < this.projections.length; j++) {
                     if (this.projections[j][5] <= 64) {
                         let x = this.projections[j][0];
@@ -575,10 +554,10 @@ class Renderer {
                         xProjected -= scaleProjected;
                         yProjected -= scaleProjected;
                         let velComp = Math.floor(x+planets[i].spinOffset);
-                        let r = planets[i].imageData[(4*(y*mapCanvas.width + velComp)) + 0];
-                        let g = planets[i].imageData[(4*(y*mapCanvas.width + velComp)) + 1];
-                        let b = planets[i].imageData[(4*(y*mapCanvas.width + velComp)) + 2];
-                        let a = planets[i].imageData[(4*(y*mapCanvas.width + velComp)) + 3];
+                        let r = planets[i].imageData[(4*(y*this.offscreenCanvas.width + velComp)) + 0];
+                        let g = planets[i].imageData[(4*(y*this.offscreenCanvas.width + velComp)) + 1];
+                        let b = planets[i].imageData[(4*(y*this.offscreenCanvas.width + velComp)) + 2];
+                        let a = planets[i].imageData[(4*(y*this.offscreenCanvas.width + velComp)) + 3];
                         for (let k = 0; k < scaleProjected*2; k++) {
                             for (let l = 0; l < scaleProjected*2; l++) {
                                 if (0 <= yProjected+k && yProjected+k < 128 && 0 <= xProjected+l && xProjected+l < 128) {
@@ -592,11 +571,11 @@ class Renderer {
                     }
                 }
                 let pos = planets[i].position.addScalar(-planets[i].radius).addVector(this.camera.offset.scale(-1));
-                this.offscreenCtx?.putImageData(this.buffer, 0, 0);
+                this.offscreenCtx.putImageData(this.buffer, 0, 0);
                 this.ctx.drawImage(this.offscreenCanvas, ...pos.toArray(), planets[i].radius*2, planets[i].radius*2);
-                this.offscreenCtx?.clearRect(0, 0, 128, 128);
+                this.offscreenCtx.clearRect(0, 0, 128, 128);
                 this.buffer.data.fill(0);
-            }
+            // }
         }
     }
 
@@ -698,6 +677,66 @@ class Renderer {
     }
 }
 
+class LoadedStuff {
+    offscreenCanvas: OffscreenCanvas;
+    offscreenCtx: OffscreenCanvasRenderingContext2D;
+    splobeImage: HTMLImageElement;
+    crosshairImage: HTMLImageElement;
+    starSheet: HTMLImageElement;
+    particleSheet: HTMLImageElement;
+    missileSheet: HTMLImageElement;
+    earthImage: HTMLImageElement;
+    earthImageData: Uint8ClampedArray;
+    moonImage: HTMLImageElement;
+    moonImageData: Uint8ClampedArray;
+    sunImage: HTMLImageElement;
+    sunImageData: Uint8ClampedArray;
+
+    constructor(offscreenCanvas: OffscreenCanvas, offscreenCtx: OffscreenCanvasRenderingContext2D, splobeImage: HTMLImageElement, crosshairImage: HTMLImageElement, starSheet: HTMLImageElement, particleSheet: HTMLImageElement, missileSheet: HTMLImageElement, earthImage: HTMLImageElement, earthImageData: Uint8ClampedArray, moonImage: HTMLImageElement, moonImageData: Uint8ClampedArray, sunImage: HTMLImageElement, sunImageData: Uint8ClampedArray) {
+        this.offscreenCanvas = offscreenCanvas;
+        this.offscreenCtx = offscreenCtx;
+        this.splobeImage = splobeImage;
+        this.crosshairImage = crosshairImage;
+        this.starSheet = starSheet;
+        this.particleSheet = particleSheet;
+        this.missileSheet = missileSheet;
+        this.earthImage = earthImage;
+        this.earthImageData = earthImageData;
+        this.moonImage = moonImage;
+        this.moonImageData = moonImageData;
+        this.sunImage = sunImage;
+        this.sunImageData = sunImageData;
+    }
+}
+
+async function loadGame(): Promise<LoadedStuff> {
+    const splobeImage = await loadImage('assets/splobe.png');
+    const crosshairImage = await loadImage('assets/crosshair.png');
+    const starSheet = await loadImage('assets/starsheet.png');
+    const particleSheet = await loadImage('assets/particlesheet.png');
+    const missileSheet = await loadImage('assets/missile.png');
+
+    const offscreenCanvas = new OffscreenCanvas(128, 128);
+    const offscreenCtx = offscreenCanvas.getContext("2d", {'willReadFrequently': true});
+    if (offscreenCtx === null) throw new Error("2D rendering context not supported.");
+    offscreenCtx.imageSmoothingEnabled = false;
+
+    const earthImage = await loadImage('assets/earth.png');
+    offscreenCtx.drawImage(earthImage, 0, 0, 128, 128);
+    const earthImageData = offscreenCtx.getImageData(0, 0, 128, 128);
+    offscreenCtx.clearRect(0, 0, 128, 128);
+    const moonImage = await loadImage('assets/moon.png');
+    offscreenCtx.drawImage(moonImage, 0, 0, 128, 128);
+    const moonImageData = offscreenCtx.getImageData(0, 0, 128, 128);
+    offscreenCtx.clearRect(0, 0, 128, 128);
+    const sunImage = await loadImage('assets/sun.png');
+    offscreenCtx.drawImage(sunImage, 0, 0, 128, 128);
+    const sunImageData = offscreenCtx.getImageData(0, 0, 128, 128);
+    offscreenCtx.clearRect(0, 0, 128, 128);
+
+    return new LoadedStuff(offscreenCanvas, offscreenCtx, splobeImage, crosshairImage, starSheet, particleSheet, missileSheet, earthImage, earthImageData.data, moonImage, moonImageData.data, sunImage, sunImageData.data);
+}
+
 function frame(timekeeper: Timekeeper, gameState: GameState, renderer: Renderer, timestamp: number): void {
     timekeeper.update(timestamp);
     gameState.update(timekeeper, renderer.camera);
@@ -706,36 +745,37 @@ function frame(timekeeper: Timekeeper, gameState: GameState, renderer: Renderer,
 }
 
 (async () => {
+    const loadedStuff = await loadGame();
     const canvas = document.getElementById("game") as (HTMLCanvasElement | null);
     if (canvas === null) throw new Error("Canvas element `game` was not found.");
     const ctx = canvas.getContext("2d");
     if (ctx === null) throw new Error("2D rendering context not supported.");
     ctx.imageSmoothingEnabled = false;
-
-    var rect = canvas.getBoundingClientRect();
-    var scaleX = canvas.width / rect.width;
-    var scaleY = canvas.height / rect.height;
+    
+    let rect = canvas.getBoundingClientRect();
+    let scaleX = canvas.width / rect.width;
+    let scaleY = canvas.height / rect.height;
     canvas.addEventListener('mousemove', (e: MouseEvent) => {
         mouseX = (e.clientX - rect.left) * scaleX;
         mouseY = (e.clientY - rect.top) * scaleY;
     });
     canvas.addEventListener('mousedown', (e: MouseEvent) => {if (!mouseDown && e.buttons === 1) mouseDown = true;});
     canvas.addEventListener('mouseup', () => {if (mouseDown) mouseDown = false;});
-    var mouse = new Mouse(new Vector2(mouseX, mouseY), mouseDown, true, true);
-
-    var timekeeper = new Timekeeper(60, 0, window.performance.now(), 0);
-    var player = new Player(splobeImage, new Vector2(0, 0), new Vector2(16, 16), 0, 0, 100, 100);
-    var sun = new Planet(sunImage, sunImageData.data, new Vector2(0, 1000), 200, 0, 32, true, null, null);
-    var earth = new Planet(earthImage, earthImageData.data, new Vector2(0, 0), 48, 0, 32, true, null, null);
-    var moon = new Planet(moonImage, moonImageData.data, new Vector2(300, 300), 24, 16, 16, true, earth, true);
-    var planets = [sun, earth, moon];
-    var gameState = new GameState(mouse, player, planets);
-    var renderingFactor = canvas.width*4;
-    var offset = new Vector2(player.position.x-(ctx.canvas.width/2), player.position.y-(ctx.canvas.height/2));
-    var cameraRegion = new Rectangle(...offset.toArray(), ctx.canvas.width, ctx.canvas.height);
-    var camera = new Camera(offset, cameraRegion, true, true);
-    var backgroundRegion = new Rectangle(...player.position.addScalar(renderingFactor*-0.5).toArray(), renderingFactor, renderingFactor);
-    var renderer = new Renderer(ctx, renderingFactor, starSheet, particleSheet, missileSheet, crosshairImage, camera, backgroundRegion);
+    let mouse = new Mouse(new Vector2(mouseX, mouseY), mouseDown, true, true);
+    
+    const timekeeper = new Timekeeper(60, 0, window.performance.now(), 0);
+    const player = new Player(loadedStuff.splobeImage, new Vector2(0, 0), new Vector2(16, 16), 0, 0, 100, 100);
+    const sun = new Planet(loadedStuff.sunImage, loadedStuff.sunImageData, new Vector2(0, 1000), 200, 0, 32, true, null, null);
+    const earth = new Planet(loadedStuff.earthImage, loadedStuff.earthImageData, new Vector2(0, 0), 48, 0, 32, true, null, null);
+    const moon = new Planet(loadedStuff.moonImage, loadedStuff.moonImageData, new Vector2(300, 300), 24, 16, 16, true, earth, true);
+    const planets = [sun, earth, moon];
+    const gameState = new GameState(mouse, player, planets);
+    const renderingFactor = canvas.width*4;
+    const offset = new Vector2(player.position.x-(ctx.canvas.width/2), player.position.y-(ctx.canvas.height/2));
+    const cameraRegion = new Rectangle(...offset.toArray(), ctx.canvas.width, ctx.canvas.height);
+    const camera = new Camera(offset, cameraRegion, true, true);
+    const backgroundRegion = new Rectangle(...player.position.addScalar(renderingFactor*-0.5).toArray(), renderingFactor, renderingFactor);
+    const renderer = new Renderer(loadedStuff.offscreenCanvas, loadedStuff.offscreenCtx, ctx, renderingFactor, loadedStuff.starSheet, loadedStuff.particleSheet, loadedStuff.missileSheet, loadedStuff.crosshairImage, camera, backgroundRegion);
     renderer.spawnStars(backgroundRegion, player);
     window.requestAnimationFrame((timestamp: number) => {frame(timekeeper, gameState, renderer, timestamp);});
 })();
