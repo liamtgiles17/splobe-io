@@ -234,7 +234,7 @@ class Missile {
         this.direction = direction;
         this.damage = 30;
         this.t0 = t0;
-        this.lifetime = 1000;
+        this.lifetime = 2000;
         this.source = source;
     }
 }
@@ -425,15 +425,13 @@ class GameState {
                 planet.position.x += planet.velocity * dt * Math.sin(angle);
                 planet.position.y -= planet.velocity * dt * Math.cos(angle);
                 for (let j = 0; j < this.planets.length; j++) {
-                    if (this.planets[j].orbiting == planet) {
+                    if (this.planets[j].orbiting === planet) {
                         this.planets[j].position.x += planet.velocity * dt * Math.sin(angle);
                         this.planets[j].position.y -= planet.velocity * dt * Math.cos(angle);
                     }
                 }
             }
         }
-        console.log(`${this.planets[1].position.distanceTo(this.planets[0].position)}`);
-        
     }
 
     update(timekeeper: Timekeeper, camera: Camera): void {
@@ -455,6 +453,8 @@ class Renderer {
     particleSheet: HTMLImageElement;
     missileSheet: HTMLImageElement;
     crosshairImage: HTMLImageElement;
+    heartIcon: HTMLImageElement;
+    fuelIcon: HTMLImageElement;
     projections: Array<[number, number, number, number, number, number]>;
     camera: Camera;
     stars: Star[];
@@ -473,7 +473,7 @@ class Renderer {
         return [x, y, xProjected, yProjected, scaleProjected, Z];
     }
 
-    constructor(offscreenCanvas: OffscreenCanvas, offscreenCtx: OffscreenCanvasRenderingContext2D, ctx: CanvasRenderingContext2D, factor: number, starSheet: HTMLImageElement, particleSheet: HTMLImageElement, missileSheet: HTMLImageElement, crosshairImage: HTMLImageElement, camera: Camera, backgroundRegion: Rectangle) {
+    constructor(offscreenCanvas: OffscreenCanvas, offscreenCtx: OffscreenCanvasRenderingContext2D, ctx: CanvasRenderingContext2D, factor: number, starSheet: HTMLImageElement, particleSheet: HTMLImageElement, missileSheet: HTMLImageElement, crosshairImage: HTMLImageElement, heartIcon: HTMLImageElement, fuelIcon: HTMLImageElement, camera: Camera, backgroundRegion: Rectangle) {
         this.offscreenCanvas = offscreenCanvas;
         this.offscreenCtx = offscreenCtx;
         this.ctx = ctx;
@@ -483,6 +483,8 @@ class Renderer {
         this.particleSheet = particleSheet;
         this.missileSheet = missileSheet;
         this.crosshairImage = crosshairImage;
+        this.heartIcon = heartIcon;
+        this.fuelIcon = fuelIcon;
         this.projections = [];
         for (let y = 0; y < 128; y++) {
             for (let x = 0; x < 128; x++) {
@@ -596,9 +598,9 @@ class Renderer {
                         }
                     }
                 }
-                let pos = planets[i].position.addScalar(-planets[i].radius).addVector(this.camera.offset.scale(-1));
+                let pos = planet.position.addScalar(-planet.radius).addVector(this.camera.offset.scale(-1));
                 this.offscreenCtx.putImageData(this.buffer, 0, 0);
-                this.ctx.drawImage(this.offscreenCanvas, ...pos.toArray(), planets[i].radius*2, planets[i].radius*2);
+                this.ctx.drawImage(this.offscreenCanvas, ...pos.toArray(), planet.radius*2, planet.radius*2);
                 this.offscreenCtx.clearRect(0, 0, 128, 128);
                 this.buffer.data.fill(0);
             }
@@ -623,7 +625,7 @@ class Renderer {
             let rotateY = player.size.y * (Math.sin(player.direction)*0.33 + Math.cos(player.direction));
             let position = new Vector2(...player.position.addVector(new Vector2(rotateX, rotateY)).toArray());
             let velocity = player.velocity/16 + (player.velocity/16 * Math.random());
-            let direction = (player.direction + Math.PI/2 + Math.PI*Math.random()) % 2*Math.PI;
+            let direction = mod((player.direction + Math.PI/2 + Math.PI*Math.random()), 2*Math.PI);
             let lifetime = 50 + 100*Math.random();
             let which = Math.floor(Math.random()*5);
             this.particles.push(new Particle(position, velocity, direction, now, lifetime, which));
@@ -667,15 +669,18 @@ class Renderer {
     }
 
     renderUI(player: Player): void {
-        let healthRatio = Math.floor(player.health/player.maxHealth);
-        let fuelRatio = Math.floor(player.fuel/player.maxFuel);
+        let healthRatio = Math.floor(192*player.health/player.maxHealth);
+        let fuelRatio = Math.floor(192*player.fuel/player.maxFuel);
         this.ctx.fillStyle = "rgb(64, 64, 64)";
         this.ctx.fillRect(12, this.ctx.canvas.height-36, 200, 24);
         this.ctx.fillRect(12, this.ctx.canvas.height-68, 200, 24);
         this.ctx.fillStyle = "rgb(255, 64, 64)";
-        this.ctx.fillRect(16, this.ctx.canvas.height-32, 192*healthRatio, 16);
+        this.ctx.fillRect(16, this.ctx.canvas.height-32, healthRatio, 16);
         this.ctx.fillStyle = "rgb(64, 64, 255)";
-        this.ctx.fillRect(16, this.ctx.canvas.height-64, 192*fuelRatio, 16);
+        this.ctx.fillRect(16, this.ctx.canvas.height-64, fuelRatio, 16);
+
+        this.ctx.drawImage(this.heartIcon, 220, this.ctx.canvas.height-32, 16, 16);
+        this.ctx.drawImage(this.fuelIcon, 220, this.ctx.canvas.height-64, 16, 16);
     }
 
     renderStats(player: Player): void {
@@ -711,6 +716,8 @@ class LoadedStuff {
     starSheet: HTMLImageElement;
     particleSheet: HTMLImageElement;
     missileSheet: HTMLImageElement;
+    heartIcon: HTMLImageElement;
+    fuelIcon: HTMLImageElement;
     earthImage: HTMLImageElement;
     earthImageData: Uint8ClampedArray;
     moonImage: HTMLImageElement;
@@ -718,7 +725,7 @@ class LoadedStuff {
     sunImage: HTMLImageElement;
     sunImageData: Uint8ClampedArray;
 
-    constructor(offscreenCanvas: OffscreenCanvas, offscreenCtx: OffscreenCanvasRenderingContext2D, splobeImage: HTMLImageElement, crosshairImage: HTMLImageElement, starSheet: HTMLImageElement, particleSheet: HTMLImageElement, missileSheet: HTMLImageElement, earthImage: HTMLImageElement, earthImageData: Uint8ClampedArray, moonImage: HTMLImageElement, moonImageData: Uint8ClampedArray, sunImage: HTMLImageElement, sunImageData: Uint8ClampedArray) {
+    constructor(offscreenCanvas: OffscreenCanvas, offscreenCtx: OffscreenCanvasRenderingContext2D, splobeImage: HTMLImageElement, crosshairImage: HTMLImageElement, starSheet: HTMLImageElement, particleSheet: HTMLImageElement, missileSheet: HTMLImageElement, heartIcon: HTMLImageElement, fuelIcon: HTMLImageElement, earthImage: HTMLImageElement, earthImageData: Uint8ClampedArray, moonImage: HTMLImageElement, moonImageData: Uint8ClampedArray, sunImage: HTMLImageElement, sunImageData: Uint8ClampedArray) {
         this.offscreenCanvas = offscreenCanvas;
         this.offscreenCtx = offscreenCtx;
         this.splobeImage = splobeImage;
@@ -726,6 +733,8 @@ class LoadedStuff {
         this.starSheet = starSheet;
         this.particleSheet = particleSheet;
         this.missileSheet = missileSheet;
+        this.heartIcon = heartIcon;
+        this.fuelIcon = fuelIcon;
         this.earthImage = earthImage;
         this.earthImageData = earthImageData;
         this.moonImage = moonImage;
@@ -741,6 +750,9 @@ async function loadGame(): Promise<LoadedStuff> {
     const starSheet = await loadImage('assets/starsheet.png');
     const particleSheet = await loadImage('assets/particlesheet.png');
     const missileSheet = await loadImage('assets/missile.png');
+
+    const heartIcon = await loadImage('assets/heart.png');
+    const fuelIcon = await loadImage('assets/fuel.png');
 
     const offscreenCanvas = new OffscreenCanvas(128, 128);
     const offscreenCtx = offscreenCanvas.getContext("2d", {'willReadFrequently': true});
@@ -760,7 +772,7 @@ async function loadGame(): Promise<LoadedStuff> {
     const sunImageData = offscreenCtx.getImageData(0, 0, 128, 128);
     offscreenCtx.clearRect(0, 0, 128, 128);
 
-    return new LoadedStuff(offscreenCanvas, offscreenCtx, splobeImage, crosshairImage, starSheet, particleSheet, missileSheet, earthImage, earthImageData.data, moonImage, moonImageData.data, sunImage, sunImageData.data);
+    return new LoadedStuff(offscreenCanvas, offscreenCtx, splobeImage, crosshairImage, starSheet, particleSheet, missileSheet, heartIcon, fuelIcon, earthImage, earthImageData.data, moonImage, moonImageData.data, sunImage, sunImageData.data);
 }
 
 function frame(timekeeper: Timekeeper, gameState: GameState, renderer: Renderer, timestamp: number): void {
@@ -792,8 +804,8 @@ function frame(timekeeper: Timekeeper, gameState: GameState, renderer: Renderer,
     const timekeeper = new Timekeeper(60, 0, window.performance.now(), 0);
     const player = new Player(loadedStuff.splobeImage, new Vector2(0, 0), new Vector2(16, 16), 0, 0, 100, 100);
     const sun = new Planet(loadedStuff.sunImage, loadedStuff.sunImageData, new Vector2(0, 0), 200, 0, 32, true, null, null);
-    const earth = new Planet(loadedStuff.earthImage, loadedStuff.earthImageData, new Vector2(0, -1000), 48, 128, 32, true, sun, false);
-    const moon = new Planet(loadedStuff.moonImage, loadedStuff.moonImageData, new Vector2(300, -700), 24, 256, 16, true, earth, true);
+    const earth = new Planet(loadedStuff.earthImage, loadedStuff.earthImageData, new Vector2(0, -600), 48, 50, 32, true, sun, true);
+    const moon = new Planet(loadedStuff.moonImage, loadedStuff.moonImageData, new Vector2(200, -600), 24, 100, 16, true, earth, false);
     const planets = [sun, earth, moon];
     const gameState = new GameState(mouse, player, planets);
     const renderingFactor = canvas.width*4;
@@ -801,7 +813,7 @@ function frame(timekeeper: Timekeeper, gameState: GameState, renderer: Renderer,
     const cameraRegion = new Rectangle(...offset.toArray(), ctx.canvas.width, ctx.canvas.height);
     const camera = new Camera(offset, cameraRegion, true, true);
     const backgroundRegion = new Rectangle(...player.position.addScalar(renderingFactor*-0.5).toArray(), renderingFactor, renderingFactor);
-    const renderer = new Renderer(loadedStuff.offscreenCanvas, loadedStuff.offscreenCtx, ctx, renderingFactor, loadedStuff.starSheet, loadedStuff.particleSheet, loadedStuff.missileSheet, loadedStuff.crosshairImage, camera, backgroundRegion);
+    const renderer = new Renderer(loadedStuff.offscreenCanvas, loadedStuff.offscreenCtx, ctx, renderingFactor, loadedStuff.starSheet, loadedStuff.particleSheet, loadedStuff.missileSheet, loadedStuff.crosshairImage, loadedStuff.heartIcon, loadedStuff.fuelIcon, camera, backgroundRegion);
     renderer.spawnStars(backgroundRegion, player);
     window.requestAnimationFrame((timestamp: number) => {frame(timekeeper, gameState, renderer, timestamp);});
 })();
