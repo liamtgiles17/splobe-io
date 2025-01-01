@@ -269,7 +269,7 @@ class Planet {
     }
 
     getRectangle(): Rectangle {
-        return new Rectangle(...this.position.toArray(), this.radius*2, this.radius*2);
+        return new Rectangle(...this.position.addScalar(-this.radius).toArray(), this.radius*2, this.radius*2);
     }
 
     update(dt: number): void {
