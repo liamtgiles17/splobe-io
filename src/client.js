@@ -58,6 +58,7 @@ window.addEventListener('keyup', (e) => {
     if ((e.key === 'e' || e.key === 'E') && keys['e'])
         keys['e'] = false;
 });
+const fontList = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '\'', '$'];
 class Vector2 {
     constructor(x = 0, y = 0) {
         this.x = x;
@@ -151,13 +152,14 @@ class Player {
         this.size = size;
         this.velocity = velocity;
         this.maxVelocity = 12000;
-        this.acceleration = 150;
+        this.acceleration = 400;
         this.direction = direction;
         this.angularVelocity = 5;
         this.maxHealth = maxHealth;
         this.health = maxHealth;
         this.maxFuel = maxFuel;
         this.fuel = maxFuel;
+        this.experience = 0;
         this.missiles = 10000;
         this.canShoot = true;
     }
@@ -275,7 +277,7 @@ class Star {
         this.position = position;
         this.size = new Vector2(3, 3);
         this.which = which;
-        this.imageSource = new Rectangle((this.which % 5) * 3, (this.which % 3) * 3, 3, 3);
+        this.imageSource = new Rectangle((this.which % 5) * 3, (Math.floor(this.which / 5)) * 3, 3, 3);
     }
 }
 class Particle {
@@ -379,7 +381,7 @@ class Renderer {
         let yProjected = (Y * (scaleProjected - pixelRadius)) + 64;
         return [x, y, xProjected, yProjected, scaleProjected, Z];
     }
-    constructor(offscreenCanvas, offscreenCtx, ctx, factor, starSheet, particleSheet, missileSheet, crosshairImage, heartIcon, fuelIcon, camera, backgroundRegion) {
+    constructor(offscreenCanvas, offscreenCtx, ctx, factor, starSheet, particleSheet, missileSheet, crosshairImage, heartIcon, fuelIcon, fontSheet, camera, backgroundRegion) {
         this.offscreenCanvas = offscreenCanvas;
         this.offscreenCtx = offscreenCtx;
         this.ctx = ctx;
@@ -391,6 +393,7 @@ class Renderer {
         this.crosshairImage = crosshairImage;
         this.heartIcon = heartIcon;
         this.fuelIcon = fuelIcon;
+        this.fontSheet = fontSheet;
         this.projections = [];
         for (let y = 0; y < 128; y++) {
             for (let x = 0; x < 128; x++) {
@@ -406,7 +409,7 @@ class Renderer {
     spawnStars(region, player) {
         for (let i = 0; i < region.w; i += 3) {
             for (let j = 0; j < region.h; j += 3) {
-                if (Math.random() > 0.9996) {
+                if (Math.random() > 0.9994) {
                     let pos = new Vector2(i + region.x, j + region.y);
                     let c = !pos.inRectangle(this.camera.region);
                     if (player.position.inRectangle(this.camera.region))
@@ -566,6 +569,17 @@ class Renderer {
         this.ctx.drawImage(player.image, ...pos.toArray());
         this.ctx.restore();
     }
+    renderFont(text, x, y, sizeMultiplier) {
+        for (let i = 0; i < text.length; i++) {
+            let index = fontList.indexOf(text[i]);
+            if (index === -1)
+                throw new Error("Invalid character in text.");
+            let xSource = (index % 10) * 10;
+            let ySource = (Math.floor(index / 10)) * 10;
+            let newSize = Math.round(10 * sizeMultiplier);
+            this.ctx.drawImage(this.fontSheet, xSource, ySource, 10, 10, x + i * newSize, y, newSize, newSize);
+        }
+    }
     renderUI(player) {
         let healthRatio = Math.floor(192 * player.health / player.maxHealth);
         let fuelRatio = Math.floor(192 * player.fuel / player.maxFuel);
@@ -598,12 +612,13 @@ class Renderer {
         this.renderParticles(timekeeper.now, timekeeper.dt, gameState.player);
         this.renderCrosshair(gameState.mouse);
         this.renderPlayer(gameState.player);
+        this.renderFont("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG", (this.ctx.canvas.width / 2) - 215, 5, 1);
         this.renderUI(gameState.player);
         this.renderStats(gameState.player);
     }
 }
 class LoadedStuff {
-    constructor(offscreenCanvas, offscreenCtx, splobeImage, crosshairImage, starSheet, particleSheet, missileSheet, heartIcon, fuelIcon, earthImage, earthImageData, moonImage, moonImageData, sunImage, sunImageData) {
+    constructor(offscreenCanvas, offscreenCtx, splobeImage, crosshairImage, starSheet, particleSheet, missileSheet, heartIcon, fuelIcon, fontSheet, earthImage, earthImageData, moonImage, moonImageData, sunImage, sunImageData) {
         this.offscreenCanvas = offscreenCanvas;
         this.offscreenCtx = offscreenCtx;
         this.splobeImage = splobeImage;
@@ -613,6 +628,7 @@ class LoadedStuff {
         this.missileSheet = missileSheet;
         this.heartIcon = heartIcon;
         this.fuelIcon = fuelIcon;
+        this.fontSheet = fontSheet;
         this.earthImage = earthImage;
         this.earthImageData = earthImageData;
         this.moonImage = moonImage;
@@ -630,6 +646,7 @@ function loadGame() {
         const missileSheet = yield loadImage('assets/missile.png');
         const heartIcon = yield loadImage('assets/heart.png');
         const fuelIcon = yield loadImage('assets/fuel.png');
+        const fontSheet = yield loadImage('assets/font.png');
         const offscreenCanvas = new OffscreenCanvas(128, 128);
         const offscreenCtx = offscreenCanvas.getContext("2d", { 'willReadFrequently': true });
         if (offscreenCtx === null)
@@ -647,7 +664,7 @@ function loadGame() {
         offscreenCtx.drawImage(sunImage, 0, 0, 128, 128);
         const sunImageData = offscreenCtx.getImageData(0, 0, 128, 128);
         offscreenCtx.clearRect(0, 0, 128, 128);
-        return new LoadedStuff(offscreenCanvas, offscreenCtx, splobeImage, crosshairImage, starSheet, particleSheet, missileSheet, heartIcon, fuelIcon, earthImage, earthImageData.data, moonImage, moonImageData.data, sunImage, sunImageData.data);
+        return new LoadedStuff(offscreenCanvas, offscreenCtx, splobeImage, crosshairImage, starSheet, particleSheet, missileSheet, heartIcon, fuelIcon, fontSheet, earthImage, earthImageData.data, moonImage, moonImageData.data, sunImage, sunImageData.data);
     });
 }
 function frame(timekeeper, gameState, renderer, timestamp) {
@@ -689,7 +706,7 @@ function frame(timekeeper, gameState, renderer, timestamp) {
     const cameraRegion = new Rectangle(...offset.toArray(), ctx.canvas.width, ctx.canvas.height);
     const camera = new Camera(offset, cameraRegion, true, true);
     const backgroundRegion = new Rectangle(...player.position.addScalar(renderingFactor * -0.5).toArray(), renderingFactor, renderingFactor);
-    const renderer = new Renderer(loadedStuff.offscreenCanvas, loadedStuff.offscreenCtx, ctx, renderingFactor, loadedStuff.starSheet, loadedStuff.particleSheet, loadedStuff.missileSheet, loadedStuff.crosshairImage, loadedStuff.heartIcon, loadedStuff.fuelIcon, camera, backgroundRegion);
+    const renderer = new Renderer(loadedStuff.offscreenCanvas, loadedStuff.offscreenCtx, ctx, renderingFactor, loadedStuff.starSheet, loadedStuff.particleSheet, loadedStuff.missileSheet, loadedStuff.crosshairImage, loadedStuff.heartIcon, loadedStuff.fuelIcon, loadedStuff.fontSheet, camera, backgroundRegion);
     renderer.spawnStars(backgroundRegion, player);
     window.requestAnimationFrame((timestamp) => { frame(timekeeper, gameState, renderer, timestamp); });
 }))();
