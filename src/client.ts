@@ -14,13 +14,26 @@ function mod(n: number, m: number): number {
 let mouseX = 0;
 let mouseY = 0;
 let mouseDown = false;
-let keys = {
+let keys: {[key: string]: boolean} = {
     'w': false,
     'a': false,
     's': false,
     'd': false,
     'q': false,
-    'e': false
+    'e': false,
+    'i': false,
+    'o': false,
+    'p': false,
+    '0': false,
+    '1': false,
+    '2': false,
+    '3': false,
+    '4': false,
+    '5': false,
+    '6': false,
+    '7': false,
+    '8': false,
+    '9': false
 };
 window.addEventListener('keydown', (e: KeyboardEvent) => {
     if ((e.key === 'w' || e.key === 'W') && !keys['w']) keys['w'] = true;
@@ -29,6 +42,19 @@ window.addEventListener('keydown', (e: KeyboardEvent) => {
     if ((e.key === 'd' || e.key === 'D') && !keys['d']) keys['d'] = true;
     if ((e.key === 'q' || e.key === 'Q') && !keys['q']) keys['q'] = true;
     if ((e.key === 'e' || e.key === 'E') && !keys['e']) keys['e'] = true;
+    if ((e.key === 'i' || e.key === 'I') && !keys['i']) keys['i'] = true;
+    if ((e.key === 'o' || e.key === 'O') && !keys['o']) keys['o'] = true;
+    if ((e.key === 'p' || e.key === 'P') && !keys['p']) keys['p'] = true;
+    if (e.key === '0' && !keys['0']) keys['0'] = true;
+    if (e.key === '1' && !keys['1']) keys['1'] = true;
+    if (e.key === '2' && !keys['2']) keys['2'] = true;
+    if (e.key === '3' && !keys['3']) keys['3'] = true;
+    if (e.key === '4' && !keys['4']) keys['4'] = true;
+    if (e.key === '5' && !keys['5']) keys['5'] = true;
+    if (e.key === '6' && !keys['6']) keys['6'] = true;
+    if (e.key === '7' && !keys['7']) keys['7'] = true;
+    if (e.key === '8' && !keys['8']) keys['8'] = true;
+    if (e.key === '9' && !keys['9']) keys['9'] = true;
 });
 window.addEventListener('keyup', (e: KeyboardEvent) => {
     if ((e.key === 'w' || e.key === 'W') && keys['w']) keys['w'] = false;
@@ -37,9 +63,36 @@ window.addEventListener('keyup', (e: KeyboardEvent) => {
     if ((e.key === 'd' || e.key === 'D') && keys['d']) keys['d'] = false;
     if ((e.key === 'q' || e.key === 'Q') && keys['q']) keys['q'] = false;
     if ((e.key === 'e' || e.key === 'E') && keys['e']) keys['e'] = false;
+    if ((e.key === 'i' || e.key === 'I') && keys['i']) keys['i'] = false;
+    if ((e.key === 'o' || e.key === 'O') && keys['o']) keys['o'] = false;
+    if ((e.key === 'p' || e.key === 'P') && keys['p']) keys['p'] = false;
+    if (e.key === '0' && keys['0']) keys['0'] = false;
+    if (e.key === '1' && keys['1']) keys['1'] = false;
+    if (e.key === '2' && keys['2']) keys['2'] = false;
+    if (e.key === '3' && keys['3']) keys['3'] = false;
+    if (e.key === '4' && keys['4']) keys['4'] = false;
+    if (e.key === '5' && keys['5']) keys['5'] = false;
+    if (e.key === '6' && keys['6']) keys['6'] = false;
+    if (e.key === '7' && keys['7']) keys['7'] = false;
+    if (e.key === '8' && keys['8']) keys['8'] = false;
+    if (e.key === '9' && keys['9']) keys['9'] = false;
 });
 
-const fontList = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '\'', '$'];
+const fontList = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '\'', '$', '.', ',', '"', '!', '?', '%', '+', '=', '(', ')'];
+
+const items: {[key: string]: {[key: string]: {[key: string]: string | boolean | ((player: Player) => void)}}} = {
+    "consumables": {
+        "fuelCanister": {
+            "name": "FUEL CANISTER",
+            "description": "+10 FUEL",
+            "stack": true,
+            "action": (player: Player) => {
+                player.fuel += 10;
+                if (player.fuel >= player.maxFuel) player.fuel = player.maxFuel;
+            }
+        }
+    }
+}
 
 class Vector2 {
     x: number;
@@ -91,8 +144,8 @@ class Vector2 {
     }
 
     inRectangle(rectangle: Rectangle): boolean {
-        let cX = this.x >= rectangle.x && this.x <= rectangle.x+rectangle.w;
-        let cY = this.y >= rectangle.y && this.y <= rectangle.y+rectangle.h;
+        let cX = this.x >= rectangle.x && this.x <= rectangle.x + rectangle.w;
+        let cY = this.y >= rectangle.y && this.y <= rectangle.y + rectangle.h;
         return cX && cY;
     }
 }
@@ -171,8 +224,11 @@ class Player {
     experience: number;
     missiles: number;
     canShoot: boolean;
+    hotbarSwitches: [boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean];
+    hotbar: ItemSlot[];
+    inventory: ItemSlot[];
 
-    constructor(image: HTMLImageElement, position: Vector2, size: Vector2, velocity: number, direction: number, maxHealth: number, maxFuel: number) {
+    constructor(image: HTMLImageElement, position: Vector2, size: Vector2, velocity: number, direction: number, maxHealth: number, maxFuel: number, hotbar: ItemSlot[], inventory: ItemSlot[]) {
         this.image = image;
         this.position = position;
         this.size = size;
@@ -188,18 +244,38 @@ class Player {
         this.experience = 0;
         this.missiles = 10000;
         this.canShoot = true;
+        this.hotbarSwitches = [true, true, true, true, true, true, true, true, true];
+        this.hotbar = hotbar;
+        this.inventory = inventory;
     }
 
     getRectangle(): Rectangle {
         return new Rectangle(this.position.x, this.position.y, this.size.x, this.size.y);
     }
 
+    useHotbarItem(): void {
+        for (let i = 0; i < 9; i++) {
+            if (this.hotbarSwitches[i] && keys[`${i+1}`]) {
+                this.hotbar[i].item?.action(this);
+                if (this.hotbar[i].getAmount() > 1) this.hotbar[i].quantity = this.hotbar[i].getAmount()-1;
+                else {
+                    this.hotbar[i].item = null;
+                    this.hotbar[i].quantity = null;
+                }
+                this.hotbarSwitches[i] = false;
+            }
+        }
+        for (let i = 0; i < 9; i++) {
+            if (!keys[`${i+1}`] && !this.hotbarSwitches[i]) this.hotbarSwitches[i] = true;
+        }
+    }
+
     propagate(dt: number): void {
-        if (keys['w']) this.velocity += this.acceleration * 0.5 * dt;
+        if (keys['w'] && this.fuel > 0) this.velocity += this.acceleration * 0.5 * dt;
         if (keys['s']) this.velocity -= this.acceleration * 0.5 * dt;
         this.position.x += this.velocity * dt * Math.sin(this.direction);
         this.position.y -= this.velocity * dt * Math.cos(this.direction);
-        if (keys['w']) this.velocity += this.acceleration * 0.5 * dt;
+        if (keys['w'] && this.fuel > 0) this.velocity += this.acceleration * 0.5 * dt;
         if (keys['s']) this.velocity -= this.acceleration * 0.5 * dt;
 
         if (this.velocity >= this.maxVelocity) this.velocity = this.maxVelocity;
@@ -216,6 +292,10 @@ class Player {
 
     update(mouse: Mouse, dt: number): void {
         if (!mouse.down && !this.canShoot) this.canShoot = true;
+        if (keys['w'] && this.fuel > 0 && this.velocity < this.maxVelocity && this.velocity > this.maxVelocity*-0.25) this.fuel -= 0.01;
+        if (this.fuel <= 0) this.fuel = 0;
+        if (this.fuel >= this.maxFuel) this.fuel = this.maxFuel;
+        this.useHotbarItem();
         this.propagate(dt);
         this.rotate(dt);
     }
@@ -447,6 +527,75 @@ class GameState {
     }
 }
 
+class Item {
+    name: string;
+    description: string;
+    stack: boolean;
+    action: (player: Player) => void;
+
+    constructor(name: string, description: string, stack: boolean, action: (player: Player) => void) {
+        this.name = name;
+        this.description = description;
+        this.stack = stack;
+        this.action = action;
+    }
+}
+
+class ItemSlot {
+    position: Vector2;
+    size: Vector2;
+    item: Item | null;
+    quantity: number | null;
+
+    constructor(position: Vector2, item: Item | null, quantity: number | null) {
+        this.position = position;
+        this.size = new Vector2(42, 42);
+        this.item = item;
+        if (item === null) this.quantity = null;
+        else this.quantity = quantity;
+    }
+
+    getAmount(): number {
+        if (this.quantity !== null) return this.quantity;
+        return 0;
+    }
+    
+    addStack (item: Item, quantity: number): void {
+        if (this.item === item && this.item.stack && this.quantity !== null) this.quantity += quantity;
+        if (this.item === null) {
+            this.item = item;
+            this.quantity = quantity;
+        }
+    }
+}
+
+class Board {
+    active: boolean;
+    canChangeState: boolean;
+    key: string;
+    rectangle: Rectangle;
+    name: string;
+    slots: Vector2[];
+
+    constructor(key: string, rectangle: Rectangle, name: string, slots: Vector2[]) {
+        this.active = false;
+        this.canChangeState = true;
+        this.key = key;
+        this.rectangle = rectangle;
+        this.name = name;
+        this.slots = slots;
+    }
+
+    activate(): void {
+        if (keys[this.key] && this.canChangeState) {
+            if (this.active) this.active = false;
+            else this.active = true;
+            this.canChangeState = false;
+        }
+        if (!keys[this.key] && !this.canChangeState) this.canChangeState = true;
+    }
+}
+
 class Renderer {
     offscreenCanvas: OffscreenCanvas;
     ctx: CanvasRenderingContext2D;
@@ -459,7 +608,9 @@ class Renderer {
     crosshairImage: HTMLImageElement;
     heartIcon: HTMLImageElement;
     fuelIcon: HTMLImageElement;
+    invSlot: HTMLImageElement;
     fontSheet: HTMLImageElement;
+    boards: Board[];
     projections: Array<[number, number, number, number, number, number]>;
     camera: Camera;
     stars: Star[];
@@ -478,7 +629,7 @@ class Renderer {
         return [x, y, xProjected, yProjected, scaleProjected, Z];
     }
 
-    constructor(offscreenCanvas: OffscreenCanvas, offscreenCtx: OffscreenCanvasRenderingContext2D, ctx: CanvasRenderingContext2D, factor: number, starSheet: HTMLImageElement, particleSheet: HTMLImageElement, missileSheet: HTMLImageElement, crosshairImage: HTMLImageElement, heartIcon: HTMLImageElement, fuelIcon: HTMLImageElement, fontSheet:HTMLImageElement, camera: Camera, backgroundRegion: Rectangle) {
+    constructor(offscreenCanvas: OffscreenCanvas, offscreenCtx: OffscreenCanvasRenderingContext2D, ctx: CanvasRenderingContext2D, factor: number, starSheet: HTMLImageElement, particleSheet: HTMLImageElement, missileSheet: HTMLImageElement, crosshairImage: HTMLImageElement, heartIcon: HTMLImageElement, fuelIcon: HTMLImageElement, invSlot: HTMLImageElement, fontSheet:HTMLImageElement, boards: Board[], camera: Camera, backgroundRegion: Rectangle) {
         this.offscreenCanvas = offscreenCanvas;
         this.offscreenCtx = offscreenCtx;
         this.ctx = ctx;
@@ -490,6 +641,8 @@ class Renderer {
         this.crosshairImage = crosshairImage;
         this.heartIcon = heartIcon;
         this.fuelIcon = fuelIcon;
+        this.invSlot = invSlot;
+        this.boards = boards;
         this.fontSheet = fontSheet;
         this.projections = [];
         for (let y = 0; y < 128; y++) {
@@ -698,6 +851,46 @@ class Renderer {
 
         this.ctx.drawImage(this.heartIcon, 220, this.ctx.canvas.height-32, 16, 16);
         this.ctx.drawImage(this.fuelIcon, 220, this.ctx.canvas.height-64, 16, 16);
+
+        this.ctx.globalAlpha = 0.75;
+        this.ctx.drawImage(this.invSlot, this.ctx.canvas.width-50, 8, 42, 42);
+        this.ctx.drawImage(this.invSlot, this.ctx.canvas.width-100, 8, 42, 42);
+        this.ctx.drawImage(this.invSlot, this.ctx.canvas.width-150, 8, 42, 42);
+        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width/2)-221, this.ctx.canvas.height-50, 42, 42);
+        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width/2)-171, this.ctx.canvas.height-50, 42, 42);
+        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width/2)-121, this.ctx.canvas.height-50, 42, 42);
+        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width/2)-71, this.ctx.canvas.height-50, 42, 42);
+        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width/2)-21, this.ctx.canvas.height-50, 42, 42);
+        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width/2)+29, this.ctx.canvas.height-50, 42, 42);
+        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width/2)+79, this.ctx.canvas.height-50, 42, 42);
+        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width/2)+129, this.ctx.canvas.height-50, 42, 42);
+        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width/2)+179, this.ctx.canvas.height-50, 42, 42);
+
+        this.ctx.globalAlpha = 1;
+        this.renderFont("P", this.ctx.canvas.width-48, 11, 1);
+        this.renderFont("O", this.ctx.canvas.width-98, 11, 1);
+        this.renderFont("I", this.ctx.canvas.width-148, 11, 1);
+        for (let i = 0; i < 9; i++) {
+            this.renderFont(`${i+1}`, (this.ctx.canvas.width/2)-219+(i*50), this.ctx.canvas.height-47, 1);
+        }
+    }
+
+    renderBoards(player: Player): void {
+        for (let i = 0; i < this.boards.length; i++) {
+            this.boards[i].activate();
+            let board = this.boards[i];
+            if (board.active) {
+                this.ctx.globalAlpha = 0.5;
+                this.ctx.fillStyle = "rgb(127, 127, 255)";
+                this.ctx.fillRect(...board.rectangle.toArray());
+                this.ctx.globalAlpha = 0.75;
+                for (let j = 0; j < board.slots.length; j++) {
+                    this.ctx.drawImage(this.invSlot, board.slots[j].x+board.rectangle.x, board.slots[j].y+board.rectangle.y, 42, 42);
+                }
+                this.ctx.globalAlpha = 1;
+                this.renderFont(board.name, (board.rectangle.x+(board.rectangle.w/2))-(10*board.name.length/2), board.rectangle.y+8, 1);
+            }
+        }
     }
 
     renderStats(player: Player): void {
@@ -707,7 +900,7 @@ class Renderer {
         this.ctx.fillText(`Speed: ${Math.round(player.velocity)}`, 2, 22);
         this.ctx.fillText(`Direction: ${Math.round(player.direction*100)/100}`, 2, 34);
         this.ctx.fillText(`Health: ${player.health}/${player.maxHealth}`, 2, 46);
-        this.ctx.fillText(`Fuel: ${player.fuel}/${player.maxFuel}`, 2, 58);
+        this.ctx.fillText(`Fuel: ${Math.round(player.fuel)}/${player.maxFuel}`, 2, 58);
         this.ctx.fillText(`Missiles: ${player.missiles}`, 2, 70);
     }
 
@@ -720,8 +913,8 @@ class Renderer {
         this.renderParticles(timekeeper.now, timekeeper.dt, gameState.player);
         this.renderCrosshair(gameState.mouse);
         this.renderPlayer(gameState.player);
-        this.renderFont("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG", (this.ctx.canvas.width/2)-215, 5, 1);
         this.renderUI(gameState.player);
+        this.renderBoards(gameState.player);
         this.renderStats(gameState.player);
     }
 }
@@ -736,6 +929,7 @@ class LoadedStuff {
     missileSheet: HTMLImageElement;
     heartIcon: HTMLImageElement;
     fuelIcon: HTMLImageElement;
+    invSlot: HTMLImageElement;
     fontSheet: HTMLImageElement;
     earthImage: HTMLImageElement;
     earthImageData: Uint8ClampedArray;
@@ -744,7 +938,7 @@ class LoadedStuff {
     sunImage: HTMLImageElement;
     sunImageData: Uint8ClampedArray;
 
-    constructor(offscreenCanvas: OffscreenCanvas, offscreenCtx: OffscreenCanvasRenderingContext2D, splobeImage: HTMLImageElement, crosshairImage: HTMLImageElement, starSheet: HTMLImageElement, particleSheet: HTMLImageElement, missileSheet: HTMLImageElement, heartIcon: HTMLImageElement, fuelIcon: HTMLImageElement, fontSheet: HTMLImageElement, earthImage: HTMLImageElement, earthImageData: Uint8ClampedArray, moonImage: HTMLImageElement, moonImageData: Uint8ClampedArray, sunImage: HTMLImageElement, sunImageData: Uint8ClampedArray) {
+    constructor(offscreenCanvas: OffscreenCanvas, offscreenCtx: OffscreenCanvasRenderingContext2D, splobeImage: HTMLImageElement, crosshairImage: HTMLImageElement, starSheet: HTMLImageElement, particleSheet: HTMLImageElement, missileSheet: HTMLImageElement, heartIcon: HTMLImageElement, fuelIcon: HTMLImageElement, invSlot: HTMLImageElement, fontSheet: HTMLImageElement, earthImage: HTMLImageElement, earthImageData: Uint8ClampedArray, moonImage: HTMLImageElement, moonImageData: Uint8ClampedArray, sunImage: HTMLImageElement, sunImageData: Uint8ClampedArray) {
         this.offscreenCanvas = offscreenCanvas;
         this.offscreenCtx = offscreenCtx;
         this.splobeImage = splobeImage;
@@ -754,6 +948,7 @@ class LoadedStuff {
         this.missileSheet = missileSheet;
         this.heartIcon = heartIcon;
         this.fuelIcon = fuelIcon;
+        this.invSlot = invSlot;
         this.fontSheet = fontSheet;
         this.earthImage = earthImage;
         this.earthImageData = earthImageData;
@@ -773,6 +968,7 @@ async function loadGame(): Promise<LoadedStuff> {
 
     const heartIcon = await loadImage('assets/heart.png');
     const fuelIcon = await loadImage('assets/fuel.png');
+    const invSlot = await loadImage('assets/slot.png');
 
     const fontSheet = await loadImage('assets/font.png');
 
@@ -794,7 +990,7 @@ async function loadGame(): Promise<LoadedStuff> {
     const sunImageData = offscreenCtx.getImageData(0, 0, 128, 128);
     offscreenCtx.clearRect(0, 0, 128, 128);
 
-    return new LoadedStuff(offscreenCanvas, offscreenCtx, splobeImage, crosshairImage, starSheet, particleSheet, missileSheet, heartIcon, fuelIcon, fontSheet, earthImage, earthImageData.data, moonImage, moonImageData.data, sunImage, sunImageData.data);
+    return new LoadedStuff(offscreenCanvas, offscreenCtx, splobeImage, crosshairImage, starSheet, particleSheet, missileSheet, heartIcon, fuelIcon, invSlot, fontSheet, earthImage, earthImageData.data, moonImage, moonImageData.data, sunImage, sunImageData.data);
 }
 
 function frame(timekeeper: Timekeeper, gameState: GameState, renderer: Renderer, timestamp: number): void {
@@ -822,20 +1018,43 @@ function frame(timekeeper: Timekeeper, gameState: GameState, renderer: Renderer,
     canvas.addEventListener('mousedown', (e: MouseEvent) => {if (!mouseDown && e.buttons === 1) mouseDown = true;});
     canvas.addEventListener('mouseup', () => {if (mouseDown) mouseDown = false;});
     let mouse = new Mouse(new Vector2(mouseX, mouseY), mouseDown, true, true);
+
+    let fuelCanisterData = items["consumables"]["fuelCanister"];
+    let fuelCanister = new Item(fuelCanisterData["name"] as string, fuelCanisterData["description"] as string, fuelCanisterData["stack"] as boolean, fuelCanisterData["action"] as (player: Player) => void);
+    let hotbar = [];
+    let inventory = [];
+    for (let i = 0; i < 9; i++) hotbar.push(new ItemSlot(new Vector2(0, 0), null, null));
+    for (let i = 0; i < 8*15; i++) inventory.push(new ItemSlot(new Vector2(0, 0), null, null));
+    hotbar[0].item = fuelCanister;
+    hotbar[0].addStack(fuelCanister, 2);
     
     const timekeeper = new Timekeeper(60, 0, window.performance.now(), 0);
-    const player = new Player(loadedStuff.splobeImage, new Vector2(0, 0), new Vector2(16, 16), 0, 0, 100, 100);
+    const player = new Player(loadedStuff.splobeImage, new Vector2(0, 0), new Vector2(16, 16), 0, 0, 100, 100, hotbar, inventory);
     const sun = new Planet(loadedStuff.sunImage, loadedStuff.sunImageData, new Vector2(0, 0), 200, 0, 32, true, null, null);
     const earth = new Planet(loadedStuff.earthImage, loadedStuff.earthImageData, new Vector2(0, -600), 48, 50, 32, true, sun, true);
     const moon = new Planet(loadedStuff.moonImage, loadedStuff.moonImageData, new Vector2(200, -600), 24, 100, 16, true, earth, false);
     const planets = [sun, earth, moon];
     const gameState = new GameState(mouse, player, planets);
+
     const renderingFactor = canvas.width*4;
     const offset = new Vector2(player.position.x-(ctx.canvas.width/2), player.position.y-(ctx.canvas.height/2));
     const cameraRegion = new Rectangle(...offset.toArray(), ctx.canvas.width, ctx.canvas.height);
     const camera = new Camera(offset, cameraRegion, true, true);
     const backgroundRegion = new Rectangle(...player.position.addScalar(renderingFactor*-0.5).toArray(), renderingFactor, renderingFactor);
-    const renderer = new Renderer(loadedStuff.offscreenCanvas, loadedStuff.offscreenCtx, ctx, renderingFactor, loadedStuff.starSheet, loadedStuff.particleSheet, loadedStuff.missileSheet, loadedStuff.crosshairImage, loadedStuff.heartIcon, loadedStuff.fuelIcon, loadedStuff.fontSheet, camera, backgroundRegion);
+    const inventorySlots = [];
+    const inventoryYRows = 15;
+    for (let y = 0; y < inventoryYRows; y++) for (let x = 0; x < 8; x++) inventorySlots.push(new Vector2(8+(x*50), 28+(y*50)));
+    const inventoryBoard = new Board("i", new Rectangle(canvas.width-416, 58, 408, 28+(inventoryYRows*50)), 'INVENTORY', inventorySlots);
+    const boards = [inventoryBoard];
+    const renderer = new Renderer(loadedStuff.offscreenCanvas, loadedStuff.offscreenCtx, ctx, renderingFactor, loadedStuff.starSheet, loadedStuff.particleSheet, loadedStuff.missileSheet, loadedStuff.crosshairImage, loadedStuff.heartIcon, loadedStuff.fuelIcon, loadedStuff.invSlot, loadedStuff.fontSheet, boards, camera, backgroundRegion);
     renderer.spawnStars(backgroundRegion, player);
+
     window.requestAnimationFrame((timestamp: number) => {frame(timekeeper, gameState, renderer, timestamp);});
 })();
+
+// TODO:
+// Fix item use logic
+// Get consumables working
+// Get icons working (and hotbar slot flash on use)
+// Drag n drop move around system
+// Get ship parts and associated UI working
