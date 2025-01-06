@@ -84,11 +84,20 @@ const items: {[key: string]: {[key: string]: {[key: string]: string | boolean | 
     "consumables": {
         "fuelCanister": {
             "name": "FUEL CANISTER",
-            "description": "+10 FUEL",
+            "description": "+25 FUEL",
             "stack": true,
             "action": (player: Player) => {
-                player.fuel += 10;
+                player.fuel += 25;
                 if (player.fuel >= player.maxFuel) player.fuel = player.maxFuel;
+            }
+        },
+        "healthPack": {
+            "name": "HEALTH PACK",
+            "description": "+25 HEALTH",
+            "stack": true,
+            "action": (player: Player) => {
+                player.health += 25;
+                if (player.health >= player.maxHealth) player.health = player.maxHealth;
             }
         }
     }
@@ -256,7 +265,7 @@ class Player {
     useHotbarItem(): void {
         for (let i = 0; i < 9; i++) {
             if (this.hotbarSwitches[i] && keys[`${i+1}`]) {
-                this.hotbar[i].item?.action(this);
+                if (this.hotbar[i].getAmount() >= 1) this.hotbar[i].item?.action(this);
                 if (this.hotbar[i].getAmount() > 1) this.hotbar[i].quantity = this.hotbar[i].getAmount()-1;
                 else {
                     this.hotbar[i].item = null;
@@ -530,12 +539,14 @@ class GameState {
 class Item {
     name: string;
     description: string;
+    icon: HTMLImageElement;
     stack: boolean;
     action: (player: Player) => void;
 
-    constructor(name: string, description: string, stack: boolean, action: (player: Player) => void) {
+    constructor(name: string, description: string, icon: HTMLImageElement, stack: boolean, action: (player: Player) => void) {
         this.name = name;
         this.description = description;
+        this.icon = icon;
         this.stack = stack;
         this.action = action;
     }
@@ -558,6 +569,11 @@ class ItemSlot {
     getAmount(): number {
         if (this.quantity !== null) return this.quantity;
         return 0;
+    }
+
+    getIcon(): HTMLImageElement {
+        if (this.item !== null) return this.item.icon
+        return new Image(0, 0);
     }
     
     addStack (item: Item, quantity: number): void {
@@ -839,6 +855,7 @@ class Renderer {
     }
 
     renderUI(player: Player): void {
+        // render health and fuel bars
         let healthRatio = Math.floor(192*player.health/player.maxHealth);
         let fuelRatio = Math.floor(192*player.fuel/player.maxFuel);
         this.ctx.fillStyle = "rgb(64, 64, 64)";
@@ -848,10 +865,10 @@ class Renderer {
         this.ctx.fillRect(16, this.ctx.canvas.height-32, healthRatio, 16);
         this.ctx.fillStyle = "rgb(64, 64, 255)";
         this.ctx.fillRect(16, this.ctx.canvas.height-64, fuelRatio, 16);
+        this.renderFont(`HEALTH - ${Math.round(player.health)}`, 19, this.ctx.canvas.height-29, 1);
+        this.renderFont(`FUEL - ${Math.round(player.fuel)}`, 19, this.ctx.canvas.height-61, 1);
 
-        this.ctx.drawImage(this.heartIcon, 220, this.ctx.canvas.height-32, 16, 16);
-        this.ctx.drawImage(this.fuelIcon, 220, this.ctx.canvas.height-64, 16, 16);
-
+        // render hotbar and board slots
         this.ctx.globalAlpha = 0.75;
         this.ctx.drawImage(this.invSlot, this.ctx.canvas.width-50, 8, 42, 42);
         this.ctx.drawImage(this.invSlot, this.ctx.canvas.width-100, 8, 42, 42);
@@ -870,9 +887,14 @@ class Renderer {
         this.renderFont("P", this.ctx.canvas.width-48, 11, 1);
         this.renderFont("O", this.ctx.canvas.width-98, 11, 1);
         this.renderFont("I", this.ctx.canvas.width-148, 11, 1);
+        this.ctx.globalAlpha = 0.75;
         for (let i = 0; i < 9; i++) {
-            this.renderFont(`${i+1}`, (this.ctx.canvas.width/2)-219+(i*50), this.ctx.canvas.height-47, 1);
+            if (player.hotbar[i].item !== null && player.hotbar[i].getAmount() > 0) {
+                this.ctx.drawImage(player.hotbar[i].getIcon(), (this.ctx.canvas.width/2)-216+(i*50), this.ctx.canvas.height-45, 32, 32);
+                if (player.hotbar[i].item?.stack) this.renderFont(`${player.hotbar[i].getAmount()}`, (this.ctx.canvas.width/2)-190+(i*50), this.ctx.canvas.height-21, 1);
+            }
         }
+        this.ctx.globalAlpha = 1;
     }
 
     renderBoards(player: Player): void {
@@ -899,9 +921,7 @@ class Renderer {
         this.ctx.fillText(`Position: [${Math.round(player.position.x/100)}, ${Math.round(player.position.y/100)}]`, 2, 10);
         this.ctx.fillText(`Speed: ${Math.round(player.velocity)}`, 2, 22);
         this.ctx.fillText(`Direction: ${Math.round(player.direction*100)/100}`, 2, 34);
-        this.ctx.fillText(`Health: ${player.health}/${player.maxHealth}`, 2, 46);
-        this.ctx.fillText(`Fuel: ${Math.round(player.fuel)}/${player.maxFuel}`, 2, 58);
-        this.ctx.fillText(`Missiles: ${player.missiles}`, 2, 70);
+        this.ctx.fillText(`Missiles: ${player.missiles}`, 2, 46);
     }
 
     render(timekeeper: Timekeeper, gameState: GameState): void {
@@ -1020,13 +1040,19 @@ function frame(timekeeper: Timekeeper, gameState: GameState, renderer: Renderer,
     let mouse = new Mouse(new Vector2(mouseX, mouseY), mouseDown, true, true);
 
     let fuelCanisterData = items["consumables"]["fuelCanister"];
-    let fuelCanister = new Item(fuelCanisterData["name"] as string, fuelCanisterData["description"] as string, fuelCanisterData["stack"] as boolean, fuelCanisterData["action"] as (player: Player) => void);
+    let fuelCanister = new Item(fuelCanisterData["name"] as string, fuelCanisterData["description"] as string, loadedStuff.fuelIcon, fuelCanisterData["stack"] as boolean, fuelCanisterData["action"] as (player: Player) => void);
+    let healthPackData = items["consumables"]["healthPack"];
+    let healthPack = new Item(healthPackData["name"] as string, healthPackData["description"] as string, loadedStuff.heartIcon, healthPackData["stack"] as boolean, healthPackData["action"] as (player: Player) => void);
     let hotbar = [];
     let inventory = [];
     for (let i = 0; i < 9; i++) hotbar.push(new ItemSlot(new Vector2(0, 0), null, null));
     for (let i = 0; i < 8*15; i++) inventory.push(new ItemSlot(new Vector2(0, 0), null, null));
     hotbar[0].item = fuelCanister;
+    hotbar[0].quantity = 1;
     hotbar[0].addStack(fuelCanister, 2);
+    hotbar[1].item = healthPack;
+    hotbar[1].quantity = 1;
+    hotbar[1].addStack(healthPack, 2);
     
     const timekeeper = new Timekeeper(60, 0, window.performance.now(), 0);
     const player = new Player(loadedStuff.splobeImage, new Vector2(0, 0), new Vector2(16, 16), 0, 0, 100, 100, hotbar, inventory);
@@ -1042,9 +1068,9 @@ function frame(timekeeper: Timekeeper, gameState: GameState, renderer: Renderer,
     const camera = new Camera(offset, cameraRegion, true, true);
     const backgroundRegion = new Rectangle(...player.position.addScalar(renderingFactor*-0.5).toArray(), renderingFactor, renderingFactor);
     const inventorySlots = [];
-    const inventoryYRows = 15;
-    for (let y = 0; y < inventoryYRows; y++) for (let x = 0; x < 8; x++) inventorySlots.push(new Vector2(8+(x*50), 28+(y*50)));
-    const inventoryBoard = new Board("i", new Rectangle(canvas.width-416, 58, 408, 28+(inventoryYRows*50)), 'INVENTORY', inventorySlots);
+    const inventoryRows = 4;
+    for (let y = 0; y < inventoryRows; y++) for (let x = 0; x < 8; x++) inventorySlots.push(new Vector2(8+(x*50), 28+(y*50)));
+    const inventoryBoard = new Board("i", new Rectangle(canvas.width-416, 58, 408, 28+(inventoryRows*50)), 'INVENTORY', inventorySlots);
     const boards = [inventoryBoard];
     const renderer = new Renderer(loadedStuff.offscreenCanvas, loadedStuff.offscreenCtx, ctx, renderingFactor, loadedStuff.starSheet, loadedStuff.particleSheet, loadedStuff.missileSheet, loadedStuff.crosshairImage, loadedStuff.heartIcon, loadedStuff.fuelIcon, loadedStuff.invSlot, loadedStuff.fontSheet, boards, camera, backgroundRegion);
     renderer.spawnStars(backgroundRegion, player);
@@ -1053,8 +1079,6 @@ function frame(timekeeper: Timekeeper, gameState: GameState, renderer: Renderer,
 })();
 
 // TODO:
-// Fix item use logic
-// Get consumables working
 // Get icons working (and hotbar slot flash on use)
 // Drag n drop move around system
 // Get ship parts and associated UI working
