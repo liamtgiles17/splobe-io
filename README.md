@@ -4,7 +4,7 @@
 
 ## Controls
 
-W/S to accelerate/decelerate. A/D to turn left/right. Q to toggle the camera lock to the player. E to toggle the crosshair (and with it the ability to shoot). Left mouse button to shoot missiles.
+W/S to accelerate/decelerate. A/D to turn left/right. Q to toggle the camera lock to the player. E to toggle the crosshair (and with it the ability to shoot). Left mouse button to shoot missiles. I to toggle inventory. 1-9 to use hotbar items.
 
 ## Screenshots
 

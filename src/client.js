@@ -203,6 +203,12 @@ class Rectangle {
         this.w = w;
         this.h = h;
     }
+    position() {
+        return new Vector2(this.x, this.y);
+    }
+    size() {
+        return new Vector2(this.w, this.h);
+    }
     toArray() {
         return [this.x, this.y, this.w, this.h];
     }
@@ -218,8 +224,9 @@ class Mouse {
         this.down = down;
         this.crosshairActive = crosshairActive;
         this.canActivate = canActivate;
+        this.itemSlot = new ItemSlot(this.position, null, null);
     }
-    update() {
+    update(inventoryActive) {
         this.position.x = mouseX - 6;
         this.position.y = mouseY - 6;
         this.down = mouseDown;
@@ -232,6 +239,8 @@ class Mouse {
         }
         if (!keys['e'] && !this.canActivate)
             this.canActivate = true;
+        if (inventoryActive)
+            this.crosshairActive = false;
     }
 }
 class Player {
@@ -429,9 +438,47 @@ class Timekeeper {
 class GameState {
     constructor(mouse, player, planets) {
         this.mouse = mouse;
+        this.moveSwitch = true;
         this.player = player;
         this.missiles = [];
         this.planets = planets;
+    }
+    moveItem(inventoryActive) {
+        if (inventoryActive) {
+            for (let i = 0; i < this.player.hotbar.length + this.player.inventory.length; i++) {
+                if (i < 9) {
+                    let slotRect = new Rectangle(...this.player.hotbar[i].position.toArray(), 42, 42);
+                    if (this.moveSwitch && this.mouse.down && this.player.hotbar[i].item !== null && this.mouse.position.inRectangle(slotRect)) {
+                        this.moveSwitch = false;
+                        this.mouse.itemSlot.addStack(this.player.hotbar[i].item, this.player.hotbar[i].getAmount());
+                        this.player.hotbar[i].removeStack();
+                    }
+                    if (!this.moveSwitch && !this.mouse.down && this.mouse.itemSlot.item !== null && this.player.hotbar[i].item === null && this.mouse.position.inRectangle(slotRect)) {
+                        this.moveSwitch = true;
+                        this.player.hotbar[i].addStack(this.mouse.itemSlot.item, this.mouse.itemSlot.getAmount());
+                        this.mouse.itemSlot.removeStack();
+                    }
+                    else if (!this.moveSwitch && !this.mouse.down && this.mouse.itemSlot.item !== null && this.player.hotbar[i].item !== null && this.mouse.position.inRectangle(slotRect)) {
+                        // account for this and other edge cases
+                        // perhaps move to a system where each icon slot is active or not
+                        // how to track where floating item has been dragged from though?
+                    }
+                }
+                else {
+                    let slotRect = new Rectangle(...this.player.inventory[i - 9].position.toArray(), 42, 42);
+                    if (this.moveSwitch && this.mouse.down && this.player.inventory[i - 9].item !== null && this.mouse.position.inRectangle(slotRect)) {
+                        this.moveSwitch = false;
+                        this.mouse.itemSlot.addStack(this.player.inventory[i - 9].item, this.player.inventory[i - 9].getAmount());
+                        this.player.inventory[i - 9].removeStack();
+                    }
+                    if (!this.moveSwitch && !this.mouse.down && this.mouse.itemSlot.item !== null && this.player.inventory[i - 9].item === null && this.mouse.position.inRectangle(slotRect)) {
+                        this.moveSwitch = true;
+                        this.player.inventory[i - 9].addStack(this.mouse.itemSlot.item, this.mouse.itemSlot.getAmount());
+                        this.mouse.itemSlot.removeStack();
+                    }
+                }
+            }
+        }
     }
     spawnMissiles(now, camera) {
         if (this.mouse.down && this.player.canShoot && this.mouse.crosshairActive && this.player.missiles > 0) {
@@ -479,8 +526,9 @@ class GameState {
             }
         }
     }
-    update(timekeeper, camera) {
-        this.mouse.update();
+    update(timekeeper, camera, inventoryActive) {
+        this.mouse.update(inventoryActive);
+        this.moveItem(inventoryActive);
         for (let i = 0; i < this.planets.length; i++)
             this.planets[i].update(timekeeper.dt);
         this.updateMissiles(timekeeper.now, timekeeper.dt, camera);
@@ -518,15 +566,20 @@ class ItemSlot {
         return new Image(0, 0);
     }
     addStack(item, quantity) {
-        if (this.item === item && this.item.stack && this.quantity !== null)
+        var _a;
+        if (this.item === item && ((_a = this.item) === null || _a === void 0 ? void 0 : _a.stack) && this.quantity !== null)
             this.quantity += quantity;
         if (this.item === null) {
             this.item = item;
             this.quantity = quantity;
         }
     }
+    removeStack() {
+        this.item = null;
+        this.quantity = null;
+    }
 }
-class Board {
+class Inventory {
     constructor(key, rectangle, name, slots) {
         this.active = false;
         this.canChangeState = true;
@@ -559,7 +612,7 @@ class Renderer {
         let yProjected = (Y * (scaleProjected - pixelRadius)) + 64;
         return [x, y, xProjected, yProjected, scaleProjected, Z];
     }
-    constructor(offscreenCanvas, offscreenCtx, ctx, factor, starSheet, particleSheet, missileSheet, crosshairImage, heartIcon, fuelIcon, invSlot, fontSheet, boards, camera, backgroundRegion) {
+    constructor(offscreenCanvas, offscreenCtx, ctx, factor, starSheet, particleSheet, missileSheet, crosshairImage, heartIcon, fuelIcon, invSlot, fontSheet, inventory, camera, backgroundRegion) {
         this.offscreenCanvas = offscreenCanvas;
         this.offscreenCtx = offscreenCtx;
         this.ctx = ctx;
@@ -572,7 +625,7 @@ class Renderer {
         this.heartIcon = heartIcon;
         this.fuelIcon = fuelIcon;
         this.invSlot = invSlot;
-        this.boards = boards;
+        this.inventory = inventory;
         this.fontSheet = fontSheet;
         this.projections = [];
         for (let y = 0; y < 128; y++) {
@@ -760,9 +813,9 @@ class Renderer {
             this.ctx.drawImage(this.fontSheet, xSource, ySource, 10, 10, x + i * newSize, y, newSize, newSize);
         }
     }
-    renderUI(player) {
+    renderUI(player, mouse) {
         var _a;
-        // render health and fuel bars
+        // render bars
         let healthRatio = Math.floor(192 * player.health / player.maxHealth);
         let fuelRatio = Math.floor(192 * player.fuel / player.maxFuel);
         this.ctx.fillStyle = "rgb(64, 64, 64)";
@@ -774,49 +827,83 @@ class Renderer {
         this.ctx.fillRect(16, this.ctx.canvas.height - 64, fuelRatio, 16);
         this.renderFont(`HEALTH - ${Math.round(player.health)}`, 19, this.ctx.canvas.height - 29, 1);
         this.renderFont(`FUEL - ${Math.round(player.fuel)}`, 19, this.ctx.canvas.height - 61, 1);
-        // render hotbar and board slots
+        // render slots
         this.ctx.globalAlpha = 0.75;
-        this.ctx.drawImage(this.invSlot, this.ctx.canvas.width - 50, 8, 42, 42);
-        this.ctx.drawImage(this.invSlot, this.ctx.canvas.width - 100, 8, 42, 42);
-        this.ctx.drawImage(this.invSlot, this.ctx.canvas.width - 150, 8, 42, 42);
-        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width / 2) - 221, this.ctx.canvas.height - 50, 42, 42);
-        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width / 2) - 171, this.ctx.canvas.height - 50, 42, 42);
-        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width / 2) - 121, this.ctx.canvas.height - 50, 42, 42);
-        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width / 2) - 71, this.ctx.canvas.height - 50, 42, 42);
-        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width / 2) - 21, this.ctx.canvas.height - 50, 42, 42);
-        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width / 2) + 29, this.ctx.canvas.height - 50, 42, 42);
-        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width / 2) + 79, this.ctx.canvas.height - 50, 42, 42);
-        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width / 2) + 129, this.ctx.canvas.height - 50, 42, 42);
-        this.ctx.drawImage(this.invSlot, (this.ctx.canvas.width / 2) + 179, this.ctx.canvas.height - 50, 42, 42);
+        let slotRect = new Rectangle(this.ctx.canvas.width - 50, 8, 42, 42);
+        this.ctx.drawImage(this.invSlot, ...slotRect.toArray());
+        slotRect.set((this.ctx.canvas.width / 2) - 221, this.ctx.canvas.height - 50, 42, 42);
+        for (let i = 0; i < 9; i++) {
+            this.ctx.drawImage(this.invSlot, ...slotRect.toArray());
+            slotRect.x += 50;
+        }
         this.ctx.globalAlpha = 1;
-        this.renderFont("P", this.ctx.canvas.width - 48, 11, 1);
-        this.renderFont("O", this.ctx.canvas.width - 98, 11, 1);
-        this.renderFont("I", this.ctx.canvas.width - 148, 11, 1);
+        // render flashes
+        this.ctx.globalAlpha = 0.6;
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeStyle = "rgb(200, 200, 200)";
+        slotRect.set((this.ctx.canvas.width / 2) - 221, this.ctx.canvas.height - 50, 42, 42);
+        for (let i = 0; i < 9; i++) {
+            if (keys[`${i + 1}`] || mouse.position.inRectangle(slotRect))
+                this.ctx.strokeRect((this.ctx.canvas.width / 2) - 220 + (i * 50), this.ctx.canvas.height - 49, 40, 40);
+            slotRect.x += 50;
+        }
+        if (keys['i'])
+            this.ctx.strokeRect(this.ctx.canvas.width - 49, 9, 40, 40);
+        // render icons + text
         this.ctx.globalAlpha = 0.75;
         for (let i = 0; i < 9; i++) {
             if (player.hotbar[i].item !== null && player.hotbar[i].getAmount() > 0) {
                 this.ctx.drawImage(player.hotbar[i].getIcon(), (this.ctx.canvas.width / 2) - 216 + (i * 50), this.ctx.canvas.height - 45, 32, 32);
                 if ((_a = player.hotbar[i].item) === null || _a === void 0 ? void 0 : _a.stack)
-                    this.renderFont(`${player.hotbar[i].getAmount()}`, (this.ctx.canvas.width / 2) - 190 + (i * 50), this.ctx.canvas.height - 21, 1);
+                    this.renderFont(`${player.hotbar[i].getAmount()}`, (this.ctx.canvas.width / 2) - 190 + (i * 50) - (10 * (player.hotbar[i].getAmount().toString().length - 1)), this.ctx.canvas.height - 21, 1);
             }
         }
+        this.renderFont("I", this.ctx.canvas.width - 48, 11, 1);
         this.ctx.globalAlpha = 1;
     }
-    renderBoards(player) {
-        for (let i = 0; i < this.boards.length; i++) {
-            this.boards[i].activate();
-            let board = this.boards[i];
-            if (board.active) {
-                this.ctx.globalAlpha = 0.5;
-                this.ctx.fillStyle = "rgb(127, 127, 255)";
-                this.ctx.fillRect(...board.rectangle.toArray());
-                this.ctx.globalAlpha = 0.75;
-                for (let j = 0; j < board.slots.length; j++) {
-                    this.ctx.drawImage(this.invSlot, board.slots[j].x + board.rectangle.x, board.slots[j].y + board.rectangle.y, 42, 42);
+    renderInventory(player, mouse) {
+        var _a, _b, _c;
+        this.inventory.activate();
+        if (this.inventory.active) {
+            this.ctx.globalAlpha = 0.5;
+            this.ctx.fillStyle = "rgb(127, 127, 255)";
+            this.ctx.fillRect(...this.inventory.rectangle.toArray());
+            this.ctx.globalAlpha = 0.75;
+            let slotRect = new Rectangle();
+            for (let j = 0; j < this.inventory.slots.length; j++) {
+                slotRect.set(...this.inventory.slots[j].addVector(this.inventory.rectangle.position()).toArray(), 42, 42);
+                this.ctx.drawImage(this.invSlot, ...slotRect.toArray());
+                if (mouse.position.inRectangle(slotRect)) {
+                    this.ctx.globalAlpha = 0.6;
+                    this.ctx.lineWidth = 2;
+                    this.ctx.strokeStyle = "rgb(200, 200, 200)";
+                    this.ctx.strokeRect(...slotRect.toArray());
+                    this.ctx.globalAlpha = 0.75;
                 }
-                this.ctx.globalAlpha = 1;
-                this.renderFont(board.name, (board.rectangle.x + (board.rectangle.w / 2)) - (10 * board.name.length / 2), board.rectangle.y + 8, 1);
+                if (j < 9) {
+                    if (player.hotbar[j].item !== null && player.hotbar[j].getAmount() > 0) {
+                        this.ctx.drawImage(player.hotbar[j].getIcon(), slotRect.x + 5, slotRect.y + 5, 32, 32);
+                        if ((_a = player.hotbar[j].item) === null || _a === void 0 ? void 0 : _a.stack)
+                            this.renderFont(`${player.hotbar[j].getAmount()}`, slotRect.x + 29 - (10 * (player.hotbar[j].getAmount().toString().length - 1)), slotRect.y + 29, 1);
+                    }
+                    this.renderFont(`${j + 1}`, slotRect.x + 2, slotRect.y + 3, 1);
+                }
+                else {
+                    if (player.inventory[j - 9].item !== null && player.inventory[j - 9].getAmount() > 0) {
+                        this.ctx.drawImage(player.inventory[j - 9].getIcon(), slotRect.x + 5, slotRect.y + 5, 32, 32);
+                        if ((_b = player.inventory[j - 9].item) === null || _b === void 0 ? void 0 : _b.stack)
+                            this.renderFont(`${player.inventory[j - 9].getAmount()}`, slotRect.x + 29 - (10 * (player.inventory[j - 9].getAmount().toString().length - 1)), slotRect.y + 29, 1);
+                    }
+                }
             }
+            this.renderFont(this.inventory.name, (this.inventory.rectangle.x + (this.inventory.rectangle.w / 2)) - (10 * this.inventory.name.length / 2), this.inventory.rectangle.y + 8, 1);
+            if (mouse.itemSlot.item !== null) {
+                this.ctx.globalAlpha = 0.5;
+                this.ctx.drawImage(mouse.itemSlot.getIcon(), mouse.position.x, mouse.position.y, 32, 32);
+                if ((_c = mouse.itemSlot.item) === null || _c === void 0 ? void 0 : _c.stack)
+                    this.renderFont(`${mouse.itemSlot.getAmount()}`, mouse.position.x + 24 - (10 * (mouse.itemSlot.getAmount().toString().length - 1)), mouse.position.y + 24, 1);
+            }
+            this.ctx.globalAlpha = 1;
         }
     }
     renderStats(player) {
@@ -836,10 +923,16 @@ class Renderer {
         this.renderParticles(timekeeper.now, timekeeper.dt, gameState.player);
         this.renderCrosshair(gameState.mouse);
         this.renderPlayer(gameState.player);
-        this.renderUI(gameState.player);
-        this.renderBoards(gameState.player);
+        this.renderUI(gameState.player, gameState.mouse);
+        this.renderInventory(gameState.player, gameState.mouse);
         this.renderStats(gameState.player);
     }
+}
+function frame(timekeeper, gameState, renderer, timestamp) {
+    timekeeper.update(timestamp);
+    gameState.update(timekeeper, renderer.camera, renderer.inventory.active);
+    renderer.render(timekeeper, gameState);
+    window.requestAnimationFrame((timestamp) => { frame(timekeeper, gameState, renderer, timestamp); });
 }
 class LoadedStuff {
     constructor(offscreenCanvas, offscreenCtx, splobeImage, crosshairImage, starSheet, particleSheet, missileSheet, heartIcon, fuelIcon, invSlot, fontSheet, earthImage, earthImageData, moonImage, moonImageData, sunImage, sunImageData) {
@@ -893,13 +986,8 @@ function loadGame() {
         return new LoadedStuff(offscreenCanvas, offscreenCtx, splobeImage, crosshairImage, starSheet, particleSheet, missileSheet, heartIcon, fuelIcon, invSlot, fontSheet, earthImage, earthImageData.data, moonImage, moonImageData.data, sunImage, sunImageData.data);
     });
 }
-function frame(timekeeper, gameState, renderer, timestamp) {
-    timekeeper.update(timestamp);
-    gameState.update(timekeeper, renderer.camera);
-    renderer.render(timekeeper, gameState);
-    window.requestAnimationFrame((timestamp) => { frame(timekeeper, gameState, renderer, timestamp); });
-}
 (() => __awaiter(void 0, void 0, void 0, function* () {
+    // load assets and get canvas context
     const loadedStuff = yield loadGame();
     const canvas = document.getElementById("game");
     if (canvas === null)
@@ -908,6 +996,7 @@ function frame(timekeeper, gameState, renderer, timestamp) {
     if (ctx === null)
         throw new Error("2D rendering context not supported.");
     ctx.imageSmoothingEnabled = false;
+    // get mouse events
     let rect = canvas.getBoundingClientRect();
     let scaleX = canvas.width / rect.width;
     let scaleY = canvas.height / rect.height;
@@ -920,22 +1009,25 @@ function frame(timekeeper, gameState, renderer, timestamp) {
     canvas.addEventListener('mouseup', () => { if (mouseDown)
         mouseDown = false; });
     let mouse = new Mouse(new Vector2(mouseX, mouseY), mouseDown, true, true);
+    // make item objects
     let fuelCanisterData = items["consumables"]["fuelCanister"];
     let fuelCanister = new Item(fuelCanisterData["name"], fuelCanisterData["description"], loadedStuff.fuelIcon, fuelCanisterData["stack"], fuelCanisterData["action"]);
     let healthPackData = items["consumables"]["healthPack"];
     let healthPack = new Item(healthPackData["name"], healthPackData["description"], loadedStuff.heartIcon, healthPackData["stack"], healthPackData["action"]);
+    // get items into inventory
     let hotbar = [];
     let inventory = [];
+    const inventoryRows = 4;
+    const inventoryCols = 9;
     for (let i = 0; i < 9; i++)
-        hotbar.push(new ItemSlot(new Vector2(0, 0), null, null));
-    for (let i = 0; i < 8 * 15; i++)
-        inventory.push(new ItemSlot(new Vector2(0, 0), null, null));
-    hotbar[0].item = fuelCanister;
-    hotbar[0].quantity = 1;
-    hotbar[0].addStack(fuelCanister, 2);
-    hotbar[1].item = healthPack;
-    hotbar[1].quantity = 1;
-    hotbar[1].addStack(healthPack, 2);
+        hotbar.push(new ItemSlot(new Vector2(canvas.width - 458 + (i * 50), 86), null, null));
+    for (let y = 0; y < inventoryRows; y++)
+        for (let x = 0; x < inventoryCols; x++)
+            inventory.push(new ItemSlot(new Vector2(canvas.width - 458 + (x * 50), 136 + (y * 50)), null, null));
+    hotbar[0].addStack(fuelCanister, 99);
+    hotbar[1].addStack(healthPack, 99);
+    inventory[35].addStack(fuelCanister, 99);
+    // initialise game state
     const timekeeper = new Timekeeper(60, 0, window.performance.now(), 0);
     const player = new Player(loadedStuff.splobeImage, new Vector2(0, 0), new Vector2(16, 16), 0, 0, 100, 100, hotbar, inventory);
     const sun = new Planet(loadedStuff.sunImage, loadedStuff.sunImageData, new Vector2(0, 0), 200, 0, 32, true, null, null);
@@ -943,23 +1035,22 @@ function frame(timekeeper, gameState, renderer, timestamp) {
     const moon = new Planet(loadedStuff.moonImage, loadedStuff.moonImageData, new Vector2(200, -600), 24, 100, 16, true, earth, false);
     const planets = [sun, earth, moon];
     const gameState = new GameState(mouse, player, planets);
+    // initialise renderer
     const renderingFactor = canvas.width * 4;
     const offset = new Vector2(player.position.x - (ctx.canvas.width / 2), player.position.y - (ctx.canvas.height / 2));
     const cameraRegion = new Rectangle(...offset.toArray(), ctx.canvas.width, ctx.canvas.height);
     const camera = new Camera(offset, cameraRegion, true, true);
     const backgroundRegion = new Rectangle(...player.position.addScalar(renderingFactor * -0.5).toArray(), renderingFactor, renderingFactor);
     const inventorySlots = [];
-    const inventoryRows = 4;
-    for (let y = 0; y < inventoryRows; y++)
-        for (let x = 0; x < 8; x++)
+    for (let y = 0; y < inventoryRows + 1; y++)
+        for (let x = 0; x < inventoryCols; x++)
             inventorySlots.push(new Vector2(8 + (x * 50), 28 + (y * 50)));
-    const inventoryBoard = new Board("i", new Rectangle(canvas.width - 416, 58, 408, 28 + (inventoryRows * 50)), 'INVENTORY', inventorySlots);
-    const boards = [inventoryBoard];
-    const renderer = new Renderer(loadedStuff.offscreenCanvas, loadedStuff.offscreenCtx, ctx, renderingFactor, loadedStuff.starSheet, loadedStuff.particleSheet, loadedStuff.missileSheet, loadedStuff.crosshairImage, loadedStuff.heartIcon, loadedStuff.fuelIcon, loadedStuff.invSlot, loadedStuff.fontSheet, boards, camera, backgroundRegion);
+    const inventoryBoard = new Inventory("i", new Rectangle(canvas.width - 466, 58, 8 + (inventoryCols * 50), 28 + ((inventoryRows + 1) * 50)), 'INVENTORY', inventorySlots);
+    const renderer = new Renderer(loadedStuff.offscreenCanvas, loadedStuff.offscreenCtx, ctx, renderingFactor, loadedStuff.starSheet, loadedStuff.particleSheet, loadedStuff.missileSheet, loadedStuff.crosshairImage, loadedStuff.heartIcon, loadedStuff.fuelIcon, loadedStuff.invSlot, loadedStuff.fontSheet, inventoryBoard, camera, backgroundRegion);
     renderer.spawnStars(backgroundRegion, player);
+    // start game loops
     window.requestAnimationFrame((timestamp) => { frame(timekeeper, gameState, renderer, timestamp); });
 }))();
 // TODO:
-// Get icons working (and hotbar slot flash on use)
 // Drag n drop move around system
 // Get ship parts and associated UI working
